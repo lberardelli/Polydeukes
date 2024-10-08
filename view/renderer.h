@@ -25,6 +25,8 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 class Renderer {
     
@@ -41,7 +43,7 @@ private:
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)screen_width / (float)screen_height, 0.1f, 100.0f);
     
     struct RenderPackage {
-        Shape* shape;
+        std::shared_ptr<Shape> shape;
         ShaderProgram* program;
     };
     
@@ -90,22 +92,38 @@ public:
         return projection;
     }
     
-    void addMesh(Shape* shape, ShaderProgram* program) {
+    std::shared_ptr<Shape> getShape(Shape* shape) {
+        for (auto&& theshape : theScene->get()) {
+            if (theshape.get() == shape) {
+                return theshape;
+            }
+        }
+        return std::shared_ptr<Shape>(nullptr);
+    }
+    
+    void addMesh(std::shared_ptr<Shape> shape, ShaderProgram* program) {
         RenderPackage package{shape, program};
         instructions.push_back(package);
         theScene->addMesh(shape);
     }
     
-    void addMesh(Shape* shape) {
+    void addMesh(std::shared_ptr<Shape> shape) {
         addMesh(shape, defaultProgram);
     }
     
-    void removeShape(Shape* shape) {
-        auto it = std::remove_if(instructions.begin(), instructions.end(), [&](RenderPackage package) {
+    void removeShape(std::shared_ptr<Shape> shape) {
+        theScene->removeMesh(shape);
+        auto it = std::remove_if(instructions.begin(), instructions.end(), [&](RenderPackage& package) {
             return package.shape == shape;
         });
+        std::vector<Particle> tmp{};
+        for (auto particle : particles) {
+            if (particle.getShape() != shape) {
+                tmp.push_back(particle);
+            }
+        }
+        particles = tmp;
         instructions = std::vector<RenderPackage>(instructions.begin(), it);
-        theScene->removeMesh(shape);
     }
     
     void addParticle(Particle particle) {
@@ -135,15 +153,15 @@ public:
         defaultProgram->setInt("texture1", 0);
         light light(glm::vec3(1.0,1.0,1.0), glm::vec3(3.0, 5.0, 8.0));
         ShaderProgram* previousProgram = 0;
-        auto start = std::chrono::high_resolution_clock::now();
         double framerate = 60;
         int i = 1;
-        ShapeBuilder builder = SphereBuilder::getInstance()->withPosition(glm::vec3(-10.0f,0.0f,0.0f)).withColour(glm::vec3(1.0f,1.0f,1.0f));
+        SphereBuilder::getInstance()->withPosition(glm::vec3(-10.0f,0.0f,0.0f)).withColour(glm::vec3(1.0f,1.0f,1.0f));
+        auto start = std::chrono::high_resolution_clock::now();
         while (!glfwWindowShouldClose(window)) {
-            if (i % 100 == 0) {
+            if (i % 10 == 0) {
                 auto end = std::chrono::high_resolution_clock::now();
                 std::chrono::duration<double> duration = end - start;
-                framerate = (double)100.0/duration.count();
+                framerate = (double)10.0/duration.count();
                 std::cout << "Framerate: " << framerate << " fps." << std::endl;
                 start = end;
                 i = 0;
@@ -155,22 +173,20 @@ public:
             view = camera->viewingTransformation();
             glm::vec3 cameraPosition = camera->getPosition();
             for (RenderPackage package : instructions) {
-                if (previousProgram != package.program) {
-                    package.program->bind();
-                    package.program->setMat4("view", view);
-                    package.program->setMat4("projection", projection);
+                package.program->bind();
+                package.program->setMat4("view", view);
+                package.program->setMat4("projection", projection);
 
-                    //set the lighting uniforms
-                    //program.setVec3("aColour", glm::vec3(1.0f, 0.5f, 0.31f));
-                    package.program->setVec3("lightColour", light.colour);
-                    package.program->setVec3("lightPosition", light.position);
-                    package.program->setVec3("eye", cameraPosition);
-                    previousProgram = package.program;
-                }
+                //set the lighting uniforms
+                //program.setVec3("aColour", glm::vec3(1.0f, 0.5f, 0.31f));
+                package.program->setVec3("lightColour", light.colour);
+                package.program->setVec3("lightPosition", light.position);
+                package.program->setVec3("eye", cameraPosition);
+                previousProgram = package.program;
                 package.shape->render(*package.program);
             }
             std::vector<collision> collisions{};
-            for (int i = 0; i < particles.size()-1; ++i) {
+            for (int i = 0; i < particles.size(); ++i) {
                 for (int j = i; j < particles.size(); ++j) {
                     if (areColliding(particles[i].getShape()->getAABB(), particles[j].getShape()->getAABB())) {
                         particles[i].basicCollision();
@@ -186,7 +202,6 @@ public:
             for (std::vector<Particle>::iterator it = particles.begin(); it != particles.end();) {
                 if (isOutsideBoundary(*it)) {
                     removeShape(it->getShape());
-                    it = particles.erase(it);
                 }
                 else {
                     ++it;

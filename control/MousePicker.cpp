@@ -15,5 +15,16 @@ Ray MousePicker::ray{};
 Renderer* MousePicker::renderer{};
 Camera* MousePicker::camera{};
 Scene* MousePicker::theScene{};
-Shape* MousePicker::targetShape{};
-Arcball* MousePicker::arcball{};
+std::shared_ptr<Shape> MousePicker::targetShape{};
+std::function<void(double,double)> MousePicker::clickCustomization{};
+
+
+glm::vec3 MeshDragger::computeNewLocation(double mousePosX, double mousePosY) {
+    //get the mouse ray
+    Ray mouseRay = MousePicker::computeMouseRay(mousePosX, mousePosY);
+    //get the plane defined by the camera and the targetShape
+    glm::vec3 planeNormal = camera->getDirection();
+    glm::vec3 planeSamplePoint = targetShape->getPosition();
+    //ray plane intersection
+    return vector::rayPlaneIntersection(Plane(planeNormal, planeSamplePoint), mouseRay);
+}

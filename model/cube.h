@@ -49,6 +49,8 @@ private:
         
 public:
     
+    virtual ~Cube() = default;
+    
     /*
      This will probably be taken out when on-the-fly shader program changes are necessary. (Seems like this is a classic view component).
      Idea: A container that wraps an shape and a shader program...
@@ -81,8 +83,8 @@ public:
         Shape::renderAABB(getAABB(), shaderProgram);
     }
     
-    Cube* clone() override {
-        return new Cube(*this);
+    std::unique_ptr<Shape> clone() override {
+        return std::unique_ptr<Cube>(new Cube(*this));
     }
     
 };
@@ -175,8 +177,8 @@ public:
         glEnableVertexAttribArray(2);
     }
     
-    Cube* build() {
-        return new Cube(VAO, vertices);
+    std::unique_ptr<Shape> build() {
+        return std::unique_ptr<Cube>(new Cube(VAO, vertices));
     }
     
 };
@@ -192,6 +194,10 @@ public:
             cubeFactory = new CubeFactory();
         }
         shape = cubeFactory->build();
+    }
+    
+    virtual std::unique_ptr<Shape> build() {
+        return shape->clone();
     }
 
 };

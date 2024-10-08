@@ -14,35 +14,83 @@
 #include "../model/Scene.h"
 #include "../model/shape.h"
 #include "Arcball.h"
+#include "vector.h"
 
 #include <vector>
 #include <algorithm>
 #include <tuple>
+#include <functional>
 
 /*
  the top level mouse control module is the picker, from there we can decide which control we want
  e.g. arcball, object mover, etc in future
 */
 
-struct Ray {
-    glm::vec3 origin;
-    glm::vec3 direction;
+class MeshDragger {
+private:
+    static std::shared_ptr<Shape> targetShape;
+    
+public:
+    
+    static Renderer* renderer;
+    static Camera* camera;
+    
+    static void registerMousePositionCallback(GLFWwindow* window, std::shared_ptr<Shape> shape) {
+        glfwSetCursorPosCallback(window, meshDraggerPositionCallback);
+        targetShape = shape;
+    }
+    
+    static void meshDraggerPositionCallback(GLFWwindow* window, double mousePosX, double mousePosY) {
+        glm::vec3 newPosition = computeNewLocation(mousePosX, mousePosY);
+        glm::vec3 delta = newPosition - targetShape->getPosition();
+        targetShape->updateModellingTransform(glm::translate(glm::mat4(1.0f), delta));
+    }
+    
+    static glm::vec3 computeNewLocation(double mousePosX, double mousePosY);
+    
+    static void setTargetShape(Shape* shape) {
+        std::shared_ptr<Shape> result = renderer->getShape(shape);
+        targetShape = result;
+    }
+    
+    MeshDragger(Camera* camera, Renderer* renderer) {
+        MeshDragger::camera = camera;
+        MeshDragger::renderer = renderer;
+    }
 };
 
 class MousePicker {
     
 public:
     
-    MousePicker(Renderer* renderer, Camera* camera, Scene* theScene, Arcball* arcball) {
+    MousePicker(Renderer* renderer, Camera* camera, Scene* theScene, std::function<void(double,double)> clickCustomization) {
         MousePicker::renderer = renderer;
         MousePicker::camera = camera;
         MousePicker::theScene = theScene;
-        MousePicker::arcball = arcball;
+        MousePicker::clickCustomization = clickCustomization;
     }
     
     virtual void enable(GLFWwindow* window) {
         glfwSetMouseButtonCallback(window, mouse_button_callback);
         glfwSetCursorPosCallback(window, mouse_position_callback);
+    }
+    
+    static Ray computeMouseRay(int mousePosX, int mousePosY) {
+        float x = (2.0f * mousePosX) / Renderer::screen_width - 1.0f;
+        float y = 1.0f - (2.0f * mousePosY) / Renderer::screen_height;
+        float z = 1.0f;
+        glm::vec3 ray_nds = glm::vec3(x, y, z);
+        //homogeneous clip coordinates
+        glm::vec4 ray_clip = glm::vec4(ray_nds.x, ray_nds.y, -1.0f, 1.0f);
+        //invert the projection matrix to get the viewing coordinates, and as point
+        glm::vec4 ray_eye = glm::inverse(renderer->getProjectionTransform()) * ray_clip;
+        ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0f, 0.0f);
+        //now finally back to world coordinates
+        glm::vec4 ray_world = glm::inverse(camera->viewingTransformation()) * ray_eye;
+        Ray retval;
+        retval.direction = glm::normalize(glm::vec3(ray_world.x, ray_world.y, ray_world.z));
+        retval.origin = camera->getPosition();
+        return retval;
     }
     
 private:
@@ -53,29 +101,19 @@ private:
     static int mousePositionX;
     static int mousePositionY;
     static Ray ray;
-    static Shape* targetShape;
-    static Arcball* arcball;
+    static std::shared_ptr<Shape> targetShape;
+    static std::function<void(double,double)> clickCustomization;
     
     static void computeWorldRay() {
-        float x = (2.0f * mousePositionX) / Renderer::screen_width - 1.0f;
-        float y = 1.0f - (2.0f * mousePositionY) / Renderer::screen_height;
-        float z = 1.0f;
-        glm::vec3 ray_nds = glm::vec3(x, y, z);
-        //homogeneous clip coordinates
-        glm::vec4 ray_clip = glm::vec4(ray_nds.x, ray_nds.y, -1.0f, 1.0f);
-        //invert the projection matrix to get the viewing coordinates, and as point
-        glm::vec4 ray_eye = glm::inverse(renderer->getProjectionTransform()) * ray_clip;
-        ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0f, 0.0f);
-        //now finally back to world coordinates
-        glm::vec4 ray_world = glm::inverse(camera->viewingTransformation()) * ray_eye;
-        MousePicker::ray.direction = glm::normalize(glm::vec3(ray_world.x, ray_world.y, ray_world.z));
-        MousePicker::ray.origin = camera->getPosition();
+        Ray mouseRay = computeMouseRay(mousePositionX, mousePositionY);
+        MousePicker::ray.direction = mouseRay.direction;
+        MousePicker::ray.origin = mouseRay.origin;
     }
     
-    static std::vector<std::tuple<Shape*, glm::vec3>> computeCollisions() {
-        std::vector<std::tuple<Shape*, glm::vec3>> candidates;
-        std::vector<Shape*> sceneItems = theScene->get();
-        for (Shape* shape : sceneItems) {
+    static std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> computeCollisions() {
+        std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates;
+        std::vector<std::shared_ptr<Shape>> sceneItems = theScene->get();
+        for (auto&& shape : sceneItems) {
             std::vector<glm::vec3> position = shape->getAABB();
             std::sort(position.begin(), position.end(), [](const glm::vec3& a, const glm::vec3& b) {
                 if (a.x != b.x) {
@@ -169,11 +207,17 @@ private:
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
             if (targetShape) {
                 targetShape->onClick();
+                MeshDragger::registerMousePositionCallback(window, targetShape);
             }
-            arcball->registerRotationCallback(window, mousePositionX, mousePositionY);
+            else {
+                clickCustomization(mousePositionX, mousePositionY);
+            }
         }
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
             glfwSetCursorPosCallback(window, mouse_position_callback);
+            if (targetShape) {
+                targetShape->onMouseUp();
+            }
         }
     }
     
@@ -181,9 +225,9 @@ private:
         mousePositionX = xpos;
         mousePositionY = ypos;
         computeWorldRay();
-        std::vector<std::tuple<Shape*, glm::vec3>> candidates = computeCollisions();
+        std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates = computeCollisions();
         if (candidates.empty()) {
-            targetShape = 0;
+            targetShape.reset();
             return;
         }
         //select the closest shape to the camera
@@ -208,7 +252,7 @@ private:
         targetShape->onHover();
         candidates.pop_back();
         for (auto elt : candidates) {
-            Shape* shape = std::get<0>(elt);
+            std::shared_ptr<Shape> shape = std::get<0>(elt);
             shape->offHover();
         }
     }

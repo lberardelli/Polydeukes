@@ -10,3 +10,4 @@
 
 SquareFactory* SquareBuilder::squareFactory = 0;
 SquareFactory* IconBuilder::squareFactory = 0;
+int Icon::count = 0;

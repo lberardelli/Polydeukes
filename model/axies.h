@@ -33,8 +33,12 @@ protected:
     
 public:
     
-    Shape* clone() override {
-        return new Axies(*this);
+    virtual ~Axies() {
+        
+    }
+    
+    std::unique_ptr<Shape> clone() override {
+        return std::unique_ptr<Axies>(new Axies(*this));
     }
     
     void render(ShaderProgram shaderProgram) override {
@@ -127,8 +131,8 @@ protected:
         }
     }
         
-    Shape* build() override {
-        return new Axies(VAO, axis_vertices);
+    std::unique_ptr<Shape> build() override {
+        return std::unique_ptr<Axies>(new Axies(VAO, axis_vertices));
     }
     
 };
@@ -143,9 +147,11 @@ public:
         }
         shape = factory->build();
     }
+    
+    virtual std::unique_ptr<Shape> build() {
+        return shape->clone();
+    }
 };
-
-AxiesFactory* AxiesBuilder::factory = 0;
 
 
 #endif /* axis_h */

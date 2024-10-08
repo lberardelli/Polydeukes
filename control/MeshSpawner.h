@@ -33,7 +33,7 @@ private:
     
     static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-            auto cube = cubeFactory->build();
+            std::shared_ptr<Shape> cube = cubeFactory->build();
             cube->setModelingTransform(glm::mat4(1.0f));
             //maybe better to add this straight to the model and update the renderer scene reference.
             renderer->addMesh(cube);

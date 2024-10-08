@@ -13,6 +13,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "texture.h"
+#include <memory>
 
 
 class SphereFactory;
@@ -36,8 +37,10 @@ protected:
     
 public:
     
-    Sphere* clone() override {
-        return new Sphere(*this);
+    virtual ~Sphere() = default;
+    
+    std::unique_ptr<Shape> clone() override {
+        return std::unique_ptr<Sphere>(new Sphere(*this));
     }
     
     void render(ShaderProgram shaderProgram) override {
@@ -47,7 +50,7 @@ public:
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0);
-        Shape::renderAABB(getAABB(), shaderProgram);
+        //Shape::renderAABB(getAABB(), shaderProgram);
     }
     
 };
@@ -183,8 +186,8 @@ private:
         nIndices = indices.size();
     }
     
-    Sphere* build() {
-        return new Sphere(VAO, vertices.data(), nvertices, nIndices);
+    std::unique_ptr<Shape> build() override {
+        return std::unique_ptr<Sphere>(new Sphere(VAO, vertices.data(), nvertices, nIndices));
     }
     
 };
@@ -196,7 +199,7 @@ private:
     
     SphereBuilder() {
         if (!sphereFactory) {
-            sphereFactory = new SphereFactory(1, 35, 35);
+            sphereFactory = new SphereFactory(0.5, 35, 35);
         }
         shape = sphereFactory->build();
     }
@@ -215,8 +218,8 @@ public:
         return instance;
     }
     
-    Sphere* build() override {
-        return (Sphere*)shape->clone();
+    std::unique_ptr<Shape> build() override {
+        return shape->clone();
     }
     
 };

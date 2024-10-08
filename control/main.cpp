@@ -36,7 +36,7 @@ class KeyboardController {
 private:
     
     static Renderer* renderer;
-    static Shape* targetShape;
+    static std::shared_ptr<Shape> targetShape;
     static ShapeBuilder* sphereBuilder;
     static ShapeBuilder* cubeBuilder;
     static ShapeBuilder* squareBuilder;
@@ -45,15 +45,21 @@ private:
     {
         if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
             targetShape = cubeBuilder->build();
-            renderer->addMesh(targetShape);
+            Particle particle = Particle(targetShape, .1f);
+            particle.addTensor(&Gravity::update);
+            renderer->addParticle(particle);
         }
         else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
             targetShape = squareBuilder->build();
-            renderer->addMesh(targetShape);
+            Particle particle = Particle(targetShape, .1f);
+            particle.addTensor(&Gravity::update);
+            renderer->addParticle(particle);
         }
         else if (key == GLFW_KEY_M && action == GLFW_PRESS) {
             targetShape = sphereBuilder->build();
-            renderer->addMesh(targetShape);
+            Particle particle = Particle(targetShape, .1f);
+            particle.addTensor(&Gravity::update);
+            renderer->addParticle(particle);
         }
         else if (key == GLFW_KEY_DOWN && action == GLFW_PRESS) {
             if (targetShape) {
@@ -97,6 +103,18 @@ private:
                 targetShape->translate(translationMatrix);
             }
         }
+        else if (key == GLFW_KEY_DELETE && action == GLFW_PRESS) {
+            if (targetShape) {
+                renderer->removeShape(targetShape);
+                targetShape = 0;
+            }
+        }
+        else if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+            if (targetShape) {
+                std::shared_ptr<Shape> cpy = targetShape->clone();
+                renderer->addMesh(cpy);
+            }
+        }
     }
   
 public:
@@ -106,7 +124,7 @@ public:
     static MousePicker* mousepicker;
     static GLFWwindow* window;
     
-    KeyboardController(Shape* initialTargetShape) {
+    KeyboardController(std::shared_ptr<Shape> initialTargetShape) {
         targetShape = initialTargetShape;
     }
     
@@ -130,17 +148,24 @@ public:
     }
     
     void setTargetShape(Shape* target) {
-        targetShape = target;
+        //find the shape in the renderer
+        std::shared_ptr<Shape> result = renderer->getShape(target);
+        targetShape = result;
     }
     
 };
+
+Camera* MeshDragger::camera{};
+std::shared_ptr<Shape> MeshDragger::targetShape{};
+Renderer* MeshDragger::renderer{};
+
 
 Arcball* KeyboardController::arcball{};
 MeshSpawner* KeyboardController::meshSpawner{};
 MousePicker* KeyboardController::mousepicker{};
 GLFWwindow* KeyboardController::window{};
 Renderer* KeyboardController::renderer{};
-Shape* KeyboardController::targetShape{};
+std::shared_ptr<Shape> KeyboardController::targetShape{};
 ShapeBuilder* KeyboardController::sphereBuilder{};
 ShapeBuilder* KeyboardController::cubeBuilder{};
 ShapeBuilder* KeyboardController::squareBuilder{};
@@ -361,33 +386,13 @@ unsigned int buildShaderProgram(const char* vertexShaderSource, const char* frag
     return shaderProgram;
 }
 
-
-glm::mat4 buildChangeOfBasisMatrix(glm::vec3 sourceVector) {
-    glm::vec3 w = glm::normalize(sourceVector);
-    glm::vec3 sample = sourceVector;
-    float max = sourceVector.x;
-    int i = 0;
-    if (sourceVector.y > max) {
-        max = sourceVector.y;
-        i = 1;
-    }
-    if (sourceVector.z > max) {
-        i = 2;
-    }
-    sample[i] = -1.0f * sample[i];
-    glm::vec3 u = glm::cross(w, glm::normalize(sample));
-    glm::vec3 v = glm::cross(w, u);
-    double m[16] = {u[0],u[1],u[2],0,-v[0],-v[1],-v[2],0,-w[0],-w[1],-w[2], 0, 0,0,0,1};
-    return glm::make_mat4(m);
-}
-
-SceneGraph getFloor() {
-    Shape* s1 = SquareBuilder().withColour(glm::vec3(0.9,0.9,0.9)).build();
-    Shape* s2 = SquareBuilder().withColour(glm::vec3(0.1,0.1,0.1)).build();
+SceneList getFloor() {
+    std::shared_ptr<Shape> s1 = SquareBuilder().withColour(glm::vec3(0.9,0.9,0.9)).build();
+    std::shared_ptr<Shape> s2 = SquareBuilder().withColour(glm::vec3(0.1,0.1,0.1)).build();
     s1->setModelingTransform(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
     s2->setModelingTransform(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
-    Shape* cur;
-    std::vector<Shape*> graph{};
+    std::shared_ptr<Shape> cur;
+    std::vector<std::unique_ptr<Shape>> graph{};
     for (int i = 0; i < 30; ++i) {
         glm::vec3 translation = glm::vec3(0.0f,0.0f,(float)i);
         for (int j = 0; j < 30; ++j) {
@@ -413,8 +418,197 @@ SceneGraph getFloor() {
             cur->setModelingTransform(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
         }
     }
-    SceneGraph sceneGraph(graph);
+    SceneList sceneGraph(std::move(graph));
     return sceneGraph;
+}
+
+void renderBasicPhysicsPlayground(GLFWwindow* window) {
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    CubeFactory factory;
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    MeshSpawner spawner = MeshSpawner(&factory, &renderer);
+    Arcball arcball = Arcball(&camera);
+    
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mosPosx, double mosPosy) {
+        arcball.registerRotationCallback(window, mosPosx, mosPosy);
+    });
+    MeshDragger::camera = &camera;
+    MeshDragger::renderer = &renderer;
+    /*
+     TODO: needing to pass the same camera to the renderer and the arcball is bad.
+     Should be injecting a rendering data package to the renderer from the control as needed.
+     I think that's gonna be coupling the arcball to a render data package in the renderer.
+     
+    */
+    
+    /*
+     TODO: What I'm really trying to do here is create an animation studio package.
+     I want something with creation mode, staging mode, and recording mode.
+     Creation mode can draw meshes and create or load animations.
+     Staging mode can organize meshes and lighting and camera positioning and such.
+     Recording mode actually plays out the scene.
+     */
+    std::shared_ptr<Shape> secondFloor = SquareBuilder().withColour(glm::vec3(0.9,0.9,0.9)).build();
+    KeyboardController controller(secondFloor);
+    secondFloor->setOnClick([&](Shape* shape){
+        controller.setTargetShape(shape);
+    });
+    KeyboardController::arcball = &arcball;
+    KeyboardController::meshSpawner = &spawner;
+    KeyboardController::mousepicker = &picker;
+    KeyboardController::window = window;
+    controller.init(&renderer);
+    std::unique_ptr<Shape> cube = CubeBuilder().withOnHoverCallback([](Shape* shape) {
+        shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
+    }).withOffHoverCallback([](Shape* shape) {
+        shape->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
+    }).withOnClickCallback([&](Shape* shape){
+        controller.setTargetShape(shape);
+    }).build();
+    std::shared_ptr<Shape> springCoil = CubeBuilder().withOnHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(0.9803921568627451,0.7764705882352941,0.03137254901960784)); })
+        .withOffHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f,1.0f,1.0f)); }).build();
+    std::shared_ptr<Shape> springCoilCopy = springCoil->clone();
+    renderer.addMesh(springCoil); renderer.addMesh(springCoilCopy);
+    Spring spring = Spring(0.9f,2, glm::vec3(3.0f,3.0f,0.0), springCoil);
+    Spring cielingSpring = Spring(0.9f,1,glm::vec3(10.0f,10.0f,0.0f), springCoilCopy);
+    Drag drag = Drag(0.1f,0.1f);
+    std::unique_ptr<Shape> sphere = SphereBuilder::getInstance()->build();
+    sphere->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(0.5,0.5,0.5)));
+    SceneListBuilder sceneGraphBuilder = SceneListBuilder();
+    sceneGraphBuilder.withOnHoverCallback([](Shape* shape) {
+        shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
+    }).withOffHoverCallback([](Shape* shape) {
+        shape->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
+    }).withOnClickCallback([&](Shape* shape){
+        controller.setTargetShape(shape);
+    });
+    std::unique_ptr<Shape> subGraph = sceneGraphBuilder.build();
+    std::vector<std::unique_ptr<Shape>> tmp;
+    tmp.push_back(cube->clone());
+    tmp.push_back(AxiesBuilder().build());
+    static_cast<SceneList*>(subGraph.get())->addShapes(std::move(tmp));
+    static_cast<SceneList*>(subGraph.get())->setPosition(glm::vec3(2.0f,2.0f,2.0f));
+    std::unique_ptr<Shape> otherGraph = sceneGraphBuilder.build();
+    std::vector<std::unique_ptr<Shape>> tmp2;
+    tmp2.push_back(std::move(sphere));
+    tmp2.push_back(AxiesBuilder().build());
+    static_cast<SceneList*>(otherGraph.get())->addShapes(std::move(tmp2));
+    std::shared_ptr<Shape> springEndSpriteS = sceneGraphBuilder.build();
+    std::shared_ptr<SceneList> springEndSprite = std::dynamic_pointer_cast<SceneList>(springEndSpriteS);
+    std::vector<std::unique_ptr<Shape>> tmp3;
+    tmp3.push_back(std::move(otherGraph));
+    tmp3.push_back(std::move(subGraph));
+    springEndSprite->addShapes(std::move(tmp3));
+    springEndSprite->setPosition(glm::vec3(10.0f,20.0f,0.0f));
+    glm::vec3 lookat = springEndSprite->getPosition() - spring.getFixedPosition();
+    std::unique_ptr<Shape> square = SquareBuilder().build();
+    square->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(6.0f,6.0f,6.0f)));
+    std::shared_ptr<Shape> platformGraphS = sceneGraphBuilder.build();
+    std::shared_ptr<SceneList> platformGraph = std::dynamic_pointer_cast<SceneList>(platformGraphS);
+    std::vector<std::unique_ptr<Shape>> tmp4;
+    tmp4.push_back(std::move(square));
+    tmp4.push_back(AxiesBuilder().build());
+    platformGraph->addShapes(std::move(tmp4));
+    platformGraph->updateModellingTransform(vector::buildChangeOfBasisMatrix(lookat));
+    platformGraph->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(3.0f,3.0f,0.0f)));
+    std::shared_ptr<Shape> cielingS = sceneGraphBuilder.build();
+    std::shared_ptr<SceneList> cieling = std::dynamic_pointer_cast<SceneList>(cielingS);
+    std::vector<std::unique_ptr<Shape>> tmp5;
+    tmp5.push_back(SquareBuilder().build());
+    tmp5.push_back(AxiesBuilder().build());
+    cieling->addShapes(std::move(tmp5));
+    cieling->updateModellingTransform(glm::rotate(glm::mat4(1.0f), 3.141592f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
+    cieling->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f,0.0f)));
+    renderer.addParticle(Particle(cieling, 0));
+    Particle springEnd(springEndSprite->clone(), 0.3333);
+    springEnd.addTensor(std::bind(&Spring::update, &cielingSpring, std::placeholders::_1, std::placeholders::_2));
+    renderer.addParticle(springEnd);
+    Particle springHead(springEndSprite->clone(), 0.10);
+    springHead.addTensor(std::bind(&Spring::update, &spring, std::placeholders::_1, std::placeholders::_2));
+    springHead.addTensor(&Gravity::update);
+    renderer.addParticle(springHead);
+    renderer.addParticle(Particle(platformGraph, 0));
+    secondFloor->setModelingTransform(glm::scale(glm::translate(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)), glm::vec3(0.0f,0.0f,10.0f)), glm::vec3(100.0f,100.0f,100.0f)));
+    std::shared_ptr<Shape> northWall = SquareBuilder().build();
+    northWall->setModelingTransform(glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f,0.0f,-400.0f)), glm::vec3(1000.0f,1000.0f,1000.0f)));
+    std::shared_ptr<Shape> westWall = SquareBuilder().build();
+    westWall->setModelingTransform(glm::scale(glm::translate(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(0.0f,1.0f,0.0f)), glm::vec3(0.0f,0.0f,400.0f)), glm::vec3(1000.0f,1000.0f,1000.0f)));
+    std::shared_ptr<Shape> eastWall = SquareBuilder().build();
+    eastWall->setModelingTransform(glm::scale(glm::translate(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(0.0f,-1.0f,0.0f)), glm::vec3(0.0f,0.0f,400.0f)), glm::vec3(1000.0f,1000.0f,1000.0f)));
+    
+    ShaderProgram
+        gridProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/lightsourcevs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/gridfs.glsl");
+    gridProgram.init();
+    
+    renderer.addParticle(Particle(secondFloor, 0),&gridProgram);
+    renderer.addParticle(Particle(northWall, 0),&gridProgram);
+    renderer.addParticle(Particle(eastWall, 0),&gridProgram);
+    renderer.addParticle(Particle(westWall, 0),&gridProgram);
+    
+    Particle pellet(SphereBuilder::getInstance()->build(), 0.10);
+    pellet.addTensor(&Gravity::update);
+    pellet.addTensor(std::bind(&Drag::update, &drag, std::placeholders::_1, std::placeholders::_2));
+    renderer.addParticle(pellet);
+    renderer.addMesh(CubeBuilder().build());
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void renderMotionCaptureScene(GLFWwindow* window) {
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.,100.f,400.f), glm::vec3(0.f,100.f,0.f));
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    Arcball arcball = Arcball(&camera);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mosPosx, double mosPosy) {
+        arcball.registerRotationCallback(window, mosPosx, mosPosy);
+    });
+    picker.enable(window);
+    std::string bvhFile = "/Users/lawrenceberardelli/Downloads/cmuconvert-daz-60-75/63/63_05.bvh";
+    std::shared_ptr<SceneGraph> graph(new SceneGraph(bvhFile));
+    renderer.addMesh(std::dynamic_pointer_cast<Shape>(graph), &program);
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+
+void renderBasicSplineStudy(GLFWwindow* window) {
+    //Need tooling to change the interpolation strategy.
+    //This tooling can engage certain "modes" required for the interpolation strategy e.g. points and tangents for bezier strategy.
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    
+    Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
+        Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
+        glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
+        renderer.addMesh(SphereBuilder::getInstance()->withPosition(position).build());
+    });
+    renderer.addMesh(IconBuilder(&camera)
+                     .withOnClickCallback([&](Shape* target) {
+                         std::vector<glm::vec3> positions{};
+                         for (auto shape : theScene.get()) {
+                             positions.push_back(shape->getPosition());
+                         }
+                         for (auto pos : positions) {
+                             std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
+                         }
+                         target->setColour(glm::vec3(0.741,0.706,0.208));
+                     })
+                     .withOnMouseUpCallback([](Shape* target) {
+                         target->setColour(glm::vec3(0.212,0.329,0.369));
+                     })
+                     .withColour(glm::vec3(0.212,0.329,0.369)).build());
+    renderer.addMesh(IconBuilder(&camera).withColour(glm::vec3(0.212,0.329,0.369)).build());
+    picker.enable(window);
+    MeshDragger::camera = &camera;
+    MeshDragger::renderer = &renderer;
+    renderer.buildandrender(window, &camera, &theScene);
 }
 
 
@@ -443,126 +637,7 @@ int main(int argc, const char * argv[]) {
     }
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     
-//    unsigned int shaderProgram = buildShaderProgram(vertexShaderSource, fragmentShaderSource);
-//    textureExample(window, shaderProgram);
-    
-//    sierpinski pinski;
-//    unsigned int pinskiShaderProgram = buildShaderProgram(pinski.vetexShader, pinski.fragmentShader);
-//    sierpinski::startRendering(window, pinskiShaderProgram);
-    
-    //unsigned int cubeShaderProgram = buildShaderProgram(cube.vertexShader, cube.fragmentShader);
-    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
-    program.init();
-    Camera camera;
-    CubeFactory factory;
-    Scene theScene{};
-    Renderer renderer(&theScene,&program);
-    MeshSpawner spawner = MeshSpawner(&factory, &renderer);
-    Arcball arcball = Arcball(&camera);
-    MousePicker picker = MousePicker(&renderer, &camera, &theScene, &arcball);
-    /*
-     TODO: needing to pass the same camera to the renderer and the arcball is bad.
-     Should be injecting a rendering data package to the renderer from the control as needed.
-     I think that's gonna be coupling the arcball to a render data package in the renderer.
-     
-     TODO: Make a sierpinski triangle shape and render call
-    */
-    
-    /*
-     TODO: What I'm really trying to do here is create an animation studio package.
-     I want something with creation mode, staging mode, and recording mode.
-     Creation mode can draw meshes and create or load animations. 
-     Staging mode can organize meshes and lighting and camera positioning and such.
-     Recording mode actually plays out the scene.
-     */
-    Shape* floor =
-        SquareBuilder().withColour(glm::vec3(0.1f,0.1f,0.1f)).withPosition(glm::vec3(0.0f,-10.0f,0.0f)).build();
-    glm::mat4 floorTransformation = glm::mat4(1.0f);
-    floorTransformation = glm::rotate(floorTransformation, (float)3.14159 / (float) 2, glm::vec3(1.0f, 0.0f, 0.0f));
-    floor->setModelingTransform(glm::scale(floorTransformation, glm::vec3(100.f, 100.f, 1.f)));
-    KeyboardController controller(floor);
-    floor->setOnClick([&](Shape* shape){
-        controller.setTargetShape(shape);
-    });
-    KeyboardController::arcball = &arcball;
-    KeyboardController::meshSpawner = &spawner;
-    KeyboardController::mousepicker = &picker;
-    KeyboardController::window = window;
-    controller.init(&renderer);
-    ShapeBuilder sphereBuilder = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).withPosition(glm::vec3(0.0f, 15.0f,0.0f));
-    ShapeBuilder cubeBuilder = CubeBuilder().withOnHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
-    }).withOffHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
-    }).withOnClickCallback([&](Shape* shape){
-        controller.setTargetShape(shape);
-    });
-    Spring spring = Spring(0.9f,2, glm::vec3(3.0f,3.0f,0.0));
-    Spring cielingSpring = Spring(0.9f,1,glm::vec3(10.0f,10.0f,0.0f));
-    Drag drag = Drag(0.1f,0.1f);
-    Sphere* sphere = SphereBuilder::getInstance()->build();
-    sphere->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(0.5,0.5,0.5)));
-    SceneGraphBuilder sceneGraphBuilder = SceneGraphBuilder();
-    sceneGraphBuilder.withOnHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
-    }).withOffHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
-    }).withOnClickCallback([&](Shape* shape){
-        controller.setTargetShape(shape);
-    });
-    SceneGraph* subGraph = sceneGraphBuilder.build();
-    subGraph->addShapes({cubeBuilder.build(), AxiesBuilder().build()});
-    subGraph->setPosition(glm::vec3(2.0f,2.0f,2.0f));
-    SceneGraph* otherGraph = sceneGraphBuilder.build();
-    otherGraph->addShapes({sphere, AxiesBuilder().build()});
-    SceneGraph* springEndSprite = sceneGraphBuilder.build();
-    springEndSprite->addShapes({otherGraph, subGraph});
-    springEndSprite->setPosition(glm::vec3(10.0f,6.0f,0.0f));
-    glm::vec3 lookat = springEndSprite->getPosition() - spring.getFixedPosition();
-    Shape* square = SquareBuilder().build();
-    square->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(6.0f,6.0f,6.0f)));
-    SceneGraph* platformGraph = sceneGraphBuilder.build();
-    platformGraph->addShapes({square, AxiesBuilder().build()});
-    platformGraph->updateModellingTransform(buildChangeOfBasisMatrix(lookat));
-    platformGraph->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(3.0f,3.0f,0.0f)));
-    SceneGraph* cieling = sceneGraphBuilder.build();
-    cieling->addShapes({SquareBuilder().build(), AxiesBuilder().build()});
-    cieling->updateModellingTransform(glm::rotate(glm::mat4(1.0f), 3.141592f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
-    cieling->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 10.0f,0.0f)));
-    renderer.addParticle(Particle(cieling, 0));
-    Particle springEnd(new SceneGraph(*springEndSprite), 0.3333);
-    springEnd.addTensor(std::bind(&Spring::update, &cielingSpring, std::placeholders::_1, std::placeholders::_2));
-    renderer.addParticle(springEnd);
-    springEndSprite->setPosition(glm::vec3(-10.0f, -6.0f, 0.0f));
-    Particle springHead(springEndSprite, 0.10);
-    springHead.addTensor(std::bind(&Spring::update, &spring, std::placeholders::_1, std::placeholders::_2));
-    springHead.addTensor(&Gravity::update);
-    renderer.addParticle(springHead);
-    renderer.addParticle(Particle(platformGraph, 0));
-    Shape* secondFloor = SquareBuilder().withColour(glm::vec3(0.9,0.9,0.9)).build();
-    secondFloor->setModelingTransform(glm::scale(glm::translate(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)), glm::vec3(0.0f,0.0f,10.0f)), glm::vec3(100.0f,100.0f,100.0f)));
-    Shape* northWall = SquareBuilder().build();
-    northWall->setModelingTransform(glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f,0.0f,-40.0f)), glm::vec3(100.0f,100.0f,100.0f)));
-    Shape* westWall = SquareBuilder().build();
-    westWall->setModelingTransform(glm::scale(glm::translate(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(0.0f,1.0f,0.0f)), glm::vec3(0.0f,0.0f,40.0f)), glm::vec3(100.0f,100.0f,100.0f)));
-    Shape* eastWall = SquareBuilder().build();
-    eastWall->setModelingTransform(glm::scale(glm::translate(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(0.0f,-1.0f,0.0f)), glm::vec3(0.0f,0.0f,40.0f)), glm::vec3(100.0f,100.0f,100.0f)));
-    
-    ShaderProgram
-        gridProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/lightsourcevs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/gridfs.glsl");
-    gridProgram.init();
-    
-    renderer.addParticle(Particle(secondFloor, 0),&gridProgram);
-    renderer.addParticle(Particle(northWall, 0),&gridProgram);
-    renderer.addParticle(Particle(eastWall, 0),&gridProgram);
-    renderer.addParticle(Particle(westWall, 0),&gridProgram);
-    
-    Particle pellet(SphereBuilder::getInstance()->build(), 0.10);
-    pellet.addTensor(&Gravity::update);
-    pellet.addTensor(std::bind(&Drag::update, &drag, std::placeholders::_1, std::placeholders::_2));
-    renderer.addParticle(pellet);
-    renderer.buildandrender(window, &camera, &theScene);
-
+    renderBasicSplineStudy(window);
 
     glfwTerminate();
     return 0;

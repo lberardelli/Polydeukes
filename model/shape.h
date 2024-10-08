@@ -18,17 +18,16 @@
 #include <glad/glad.h>
 
 #include <limits>
+#include <memory>
 
 class ShaderProgram;
-class SceneGraphNode;
+class SceneListNode;
 
 
 /*
  A Shape object models the vertex data of the shape it represents and
  the modeling transformation it is subject to. It also has a shader program to enable swapping
  of shaders on the fly.
- 
- Leaking a reference to a shader program in the model is questionable. But it's best so far.
  
  All shapes have all schema in common except the behaviour of the render call.
  So, we can make a shape builder and override a clone of Shape.
@@ -43,7 +42,7 @@ class ShapeBuilder;
 
 class Shape : public Clickable<Shape> {
     friend ShapeBuilder;
-    friend SceneGraphNode;
+    friend SceneListNode;
 protected:
     Mesh mesh;
     glm::mat4 modellingTransform = glm::mat4(1.0f);
@@ -57,6 +56,10 @@ public:
         glGenVertexArrays(1, &AABBVAO);
         glGenBuffers(1, &AABBEBO);
         glGenBuffers(1, &AABBVBO);
+    }
+    
+    virtual ~Shape() {
+        
     }
     
     glm::mat4 getModellingTransform() const {
@@ -112,7 +115,7 @@ public:
         glBindVertexArray(0);
     }
     
-    virtual Shape* clone() = 0;
+    virtual std::unique_ptr<Shape> clone() = 0;
     
     virtual void onHover() override {
         hoverCallback(this);
@@ -145,6 +148,7 @@ public:
         this->clickCallback = that.clickCallback;
         this->hoverCallback = that.hoverCallback;
         this->offHoverCallback = that.offHoverCallback;
+        this->onMouseUpCallback = that.onMouseUpCallback;
         glGenVertexArrays(1, &AABBVAO);
         glGenBuffers(1, &AABBEBO);
         glGenBuffers(1, &AABBVBO);
@@ -152,6 +156,10 @@ public:
     
     virtual void onClick() override {
         clickCallback(this);
+    }
+    
+    virtual void onMouseUp() override {
+        onMouseUpCallback(this);
     }
     
     /*
@@ -217,18 +225,17 @@ public:
         translate(translationMatrix);
     }
     
-    virtual ~Shape() = default;
 };
 
 class ShapeFactory {
 public:
-    virtual Shape* build() = 0;
+    virtual std::unique_ptr<Shape> build() = 0;
 };
 
 class ShapeBuilder {
 private:
 protected:
-    Shape* shape;
+    std::unique_ptr<Shape> shape{};
 public:
     ShapeBuilder& withTexture(std::string&& texture_path) {
         shape->texture = texture::generateTexture(texture_path);
@@ -242,6 +249,11 @@ public:
     
     ShapeBuilder& withColour(glm::vec3& colour) {
         shape->colour = colour;
+        return *this;
+    }
+    
+    ShapeBuilder& withOnMouseUpCallback(std::function<void(Shape*)> callback) {
+        shape->setOnMouseUp(callback);
         return *this;
     }
     
@@ -270,9 +282,7 @@ public:
         return *this;
     }
     
-    virtual Shape* build() {
-        return shape->clone();
-    }
+    virtual std::unique_ptr<Shape> build() = 0;
 };
 
 

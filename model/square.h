@@ -13,6 +13,7 @@
 #include "clickable.h"
 #include "Camera.h"
 #include "../control/ShaderProgram.h"
+#include "../control/vector.h"
 
 #ifndef square_h
 #define square_h
@@ -39,6 +40,8 @@ protected:
     
 public:
     
+    virtual ~Square() = default;
+    
     void render(ShaderProgram shaderProgram) override {
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
@@ -49,8 +52,8 @@ public:
         Shape::renderAABB(getAABB(), shaderProgram);
     }
     
-    Square* clone() override {
-        return new Square(*this);
+    std::unique_ptr<Shape> clone() override {
+        return std::unique_ptr<Square>(new Square(*this));
     }
     
 };
@@ -59,41 +62,46 @@ class Icon : public Square {
     friend SquareFactory;
     friend IconBuilder;
     
+private:
+    static int count;
+    int currentCount = 0;
+    
 protected:
     Camera* camera;
     
     Icon(unsigned int VAO, float* vertices, Camera* camera) : Square(VAO, vertices), camera(camera) {}
     
     Icon(Icon& icon) : Square(icon) {
+        currentCount = count;
+        ++count;
         this->camera = icon.camera;
     }
     
-    Icon* clone() override {
-        return new Icon(*this);
+    std::unique_ptr<Shape> clone() override {
+        return std::unique_ptr<Icon>(new Icon(*this));
     }
     
 public:
     
+    virtual ~Icon() = default;
+    
     void render(ShaderProgram shaderProgram) override {
+        glm::mat4 meshTransform = glm::inverse(modellingTransform);
         modellingTransform = glm::translate(glm::mat4(1.0f), camera->getPosition());
         glm::vec3 direction = glm::vec3(camera->getDirection().x * 10, camera->getDirection().y * 10, camera->getDirection().z * 10);
         modellingTransform = glm::translate(modellingTransform, direction);
         modellingTransform = modellingTransform * glm::inverse(camera->arcballTransformation());
-        modellingTransform = glm::translate(modellingTransform, glm::vec3(2.0f, 2.0f, -2.0f));
-        float time = glfwGetTime();
-        float angle = glm::radians(45.0f) * time;
-        glm::mat4 zoo = modellingTransform * glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
-        shaderProgram.setMat4("model", zoo);
+        modellingTransform = glm::translate(modellingTransform, glm::vec3(20.0f, 3.0f - currentCount * 3, -40.0f));
+        modellingTransform = glm::scale(modellingTransform, glm::vec3(2.f,2.f,2.f));
+        shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
+        glm::mat4 tmp = modellingTransform * meshTransform;
+        mesh.updatePosition(tmp);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         Shape::renderAABB(getAABB(), shaderProgram);
-    }
-    
-    void onClick() override {
-        colour = glm::vec3(0.0f,1.0f,0.0f);
     }
     
 };
@@ -140,12 +148,12 @@ private:
         glEnableVertexAttribArray(2);
     }
     
-    Square* build() override {
-        return new Square(VAO, vertices);
+    std::unique_ptr<Shape> build() override {
+        return std::unique_ptr<Square>(new Square(VAO, vertices));
     }
     
-    Icon* buildIcon(Camera* camera) {
-        return new Icon(VAO, vertices, camera);
+    std::unique_ptr<Shape> buildIcon(Camera* camera) {
+        return std::unique_ptr<Icon>(new Icon(VAO, vertices, camera));
     }
     
 };
@@ -162,6 +170,10 @@ public:
         }
         shape = squareFactory->build();
     }
+    
+    virtual std::unique_ptr<Shape> build() {
+        return shape->clone();
+    }
 
 };
 
@@ -174,6 +186,10 @@ public:
             squareFactory = new SquareFactory();
         }
         shape = squareFactory->buildIcon(camera);
+    }
+    
+    virtual std::unique_ptr<Shape> build() {
+        return shape->clone();
     }
     
 };

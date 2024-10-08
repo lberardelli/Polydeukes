@@ -12,18 +12,18 @@
 #include <functional>
 
 #include <glm.hpp>
-#include "clickable.h"
+#include "vector.h"
 
 class Spring;
 class Gravity;
 class Drag;
 
-class Particle : public Clickable<Particle> {
+class Particle {
     friend Spring;
     friend Drag;
     friend Gravity;
 private:
-    Shape* shape; 
+    std::shared_ptr<Shape> shape;
     float inverse_mass;
     glm::vec3 velocity = glm::vec3(0.0f);
     glm::vec3 force = glm::vec3(0.0f);
@@ -35,9 +35,9 @@ private:
     
 public:
     
-    Particle(Shape* shape, float inverse_mass) : shape(shape), inverse_mass(inverse_mass) {}
+    Particle(std::shared_ptr<Shape> shape, float inverse_mass) : shape(shape), inverse_mass(inverse_mass) {}
     
-    Particle(Shape* shape, float inverse_mass, glm::vec3 velocity) : shape(shape), inverse_mass(inverse_mass), velocity(velocity) {}
+    Particle(std::shared_ptr<Shape> shape, float inverse_mass, glm::vec3 velocity) : shape(shape), inverse_mass(inverse_mass), velocity(velocity) {}
     
     Particle(const Particle& that) {
         this->shape = that.shape;
@@ -47,13 +47,9 @@ public:
             tensors.push_back(tensor);
         }
     }
-    
-    Shape* getShape() {
+        
+    std::shared_ptr<Shape> getShape() {
         return shape;
-    }
-    
-    void onClick() override {
-        clickCallback(this);
     }
     
     /*
@@ -101,9 +97,10 @@ private:
     float springConstant = 0;
     float restingLength;
     glm::vec3 initialPosition{};
+    std::shared_ptr<Shape> coilShape{};
 public:
     
-    Spring(float constant, float restingLength, glm::vec3 initialPosition) : springConstant(constant), restingLength(restingLength), initialPosition(initialPosition) {}
+    Spring(float constant, float restingLength, glm::vec3 initialPosition, std::shared_ptr<Shape> coilShape) : springConstant(constant), restingLength(restingLength), initialPosition(initialPosition), coilShape(coilShape) {}
     
     Spring(float constant, float restingLength) : springConstant(constant), restingLength(restingLength) {}
     
@@ -114,6 +111,8 @@ public:
     void update(Particle& particle, float deltaTime) {
         glm::vec3 currentPosition = particle.getPosition();
         glm::vec3 delta = currentPosition - initialPosition;
+        float deltaLength = glm::length(delta);
+        coilShape->setModelingTransform(vector::scaleGeometryBetweenTwoPointsTransformation(currentPosition, initialPosition));
         float magnitude = -1.0f * springConstant * (glm::length(delta) - restingLength);
         glm::vec3 direction = glm::normalize(delta);
         glm::vec3 force = glm::vec3(direction.x * magnitude, direction.y * magnitude, direction.z * magnitude);
