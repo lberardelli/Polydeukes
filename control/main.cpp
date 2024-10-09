@@ -584,19 +584,45 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     Renderer renderer(&theScene,&program);
     
     Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
+    std::vector<std::shared_ptr<Shape>> controlPoints{};
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
-        renderer.addMesh(SphereBuilder::getInstance()->withPosition(position).build());
+        std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).withPosition(position).build();
+        renderer.addMesh(controlPoint);
+        controlPoints.push_back(controlPoint);
     });
     renderer.addMesh(IconBuilder(&camera)
                      .withOnClickCallback([&](Shape* target) {
-                         std::vector<glm::vec3> positions{};
-                         for (auto shape : theScene.get()) {
-                             positions.push_back(shape->getPosition());
+                         for (auto point : controlPoints) {
+                             std::cout << point->getPosition().x << " " << point->getPosition().y << " " << point->getPosition().z << std::endl;
                          }
-                         for (auto pos : positions) {
-                             std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
+                         //compute the interpolating polynomial.
+                         glm::mat4 constraintMatrix = glm::mat4(
+                                 1.0f, 0.0f,   0.0f,     0.0f,
+                                 1.0f, 1.0f/3.0f, 1.0f/9.0f, 1.0f/27.0f,
+                                 1.0f, 2.0f/3.0f, 4.0f/9.0f, 8.0f/27.0f,
+                                 1.0f, 1.0f,   1.0f,    1.0f
+                             );
+                         glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
+                         glm::mat4x3 result;
+                         for (int i = 0; i < 4; ++i) {
+                             glm::vec4 row = blendingMatrix[i];
+                             glm::vec3 accum = glm::vec3(0.0f,0.0f,0.0f);
+                             for (int j = 0; j < 4; ++j) {
+                                  accum += row[j] * controlPoints[j]->getPosition();
+                             }
+                             result[i] = accum;
+                         }
+                         for (float i = 0.f; i < 1.05f; i += 0.05) {
+                             glm::vec3 value = glm::vec3(0.0f,0.0f,0.0f);
+                             glm::vec4 u = glm::vec4(1.0f,i,i*i, i*i*i);
+                             for (int j = 0; j < 4; ++j) {
+                                 glm::vec3 row = result[j];
+                                 value += u[j] * row;
+                             }
+                             std::shared_ptr<Shape> notch = SphereBuilder::getInstance()->withPosition(value).withColour(value).build();
+                             renderer.addMesh(notch);
                          }
                          target->setColour(glm::vec3(0.741,0.706,0.208));
                      })
