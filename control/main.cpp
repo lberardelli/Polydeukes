@@ -573,6 +573,36 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_ptr<Shape>>& controlPoints, Renderer& renderer) {
+    glm::mat4 constraintMatrix = glm::mat4(
+            1.0f, 0.0f,   0.0f,     0.0f,
+            1.0f, 1.0f/3.0f, 1.0f/9.0f, 1.0f/27.0f,
+            1.0f, 2.0f/3.0f, 4.0f/9.0f, 8.0f/27.0f,
+            1.0f, 1.0f,   1.0f,    1.0f
+        );
+    glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
+    glm::mat4x3 result;
+    for (int i = 0; i < 4; ++i) {
+        glm::vec4 row = blendingMatrix[i];
+        glm::vec3 accum = glm::vec3(0.0f,0.0f,0.0f);
+        for (int j = 0; j < 4; ++j) {
+             accum += row[j] * controlPoints[j]->getPosition();
+        }
+        result[i] = accum;
+    }
+    std::vector<glm::vec3> positions{};
+    for (float i = 0.f; i < 1.00f; i += 0.001) {
+        glm::vec3 value = glm::vec3(0.0f,0.0f,0.0f);
+        glm::vec4 u = glm::vec4(1.0f,i,i*i, i*i*i);
+        for (int j = 0; j < 4; ++j) {
+            glm::vec3 row = result[j];
+            value += u[j] * row;
+        }
+        positions.push_back(value);
+    }
+    return positions;
+}
+
 
 void renderBasicSplineStudy(GLFWwindow* window) {
     //Need tooling to change the interpolation strategy.
@@ -594,35 +624,35 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     });
     renderer.addMesh(IconBuilder(&camera)
                      .withOnClickCallback([&](Shape* target) {
-                         for (auto point : controlPoints) {
-                             std::cout << point->getPosition().x << " " << point->getPosition().y << " " << point->getPosition().z << std::endl;
-                         }
                          //compute the interpolating polynomial.
-                         glm::mat4 constraintMatrix = glm::mat4(
-                                 1.0f, 0.0f,   0.0f,     0.0f,
-                                 1.0f, 1.0f/3.0f, 1.0f/9.0f, 1.0f/27.0f,
-                                 1.0f, 2.0f/3.0f, 4.0f/9.0f, 8.0f/27.0f,
-                                 1.0f, 1.0f,   1.0f,    1.0f
-                             );
-                         glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
-                         glm::mat4x3 result;
-                         for (int i = 0; i < 4; ++i) {
-                             glm::vec4 row = blendingMatrix[i];
-                             glm::vec3 accum = glm::vec3(0.0f,0.0f,0.0f);
-                             for (int j = 0; j < 4; ++j) {
-                                  accum += row[j] * controlPoints[j]->getPosition();
-                             }
-                             result[i] = accum;
-                         }
-                         for (float i = 0.f; i < 1.05f; i += 0.05) {
-                             glm::vec3 value = glm::vec3(0.0f,0.0f,0.0f);
-                             glm::vec4 u = glm::vec4(1.0f,i,i*i, i*i*i);
-                             for (int j = 0; j < 4; ++j) {
-                                 glm::vec3 row = result[j];
-                                 value += u[j] * row;
-                             }
-                             std::shared_ptr<Shape> notch = SphereBuilder::getInstance()->withPosition(value).withColour(value).build();
+                         std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
+                         std::vector<std::shared_ptr<Shape>> fill{};
+                         for (auto pos : positions) {
+                             std::shared_ptr<Shape> notch = SquareBuilder().withPosition(pos).withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+                             fill.push_back(notch);
                              renderer.addMesh(notch);
+                         }
+                         for (auto shape : fill) {
+                             shape->setOnClick([fill](Shape* shape) {
+                                 for (auto it : fill) {
+                                     it->setColour(glm::vec3(0.5f,0.5f,0.5f));
+                                 }
+                             });
+                             shape->setOnMouseUp([fill](Shape* shape) {
+                                 for (auto it : fill) {
+                                     it->setColour(glm::vec3(1.0f,1.0f,1.0f));
+                                 }
+                             });
+                         }
+                         auto lineFill = std::make_shared<std::vector<std::shared_ptr<Shape>>>(fill);
+
+                         for (auto point : controlPoints) {
+                             point->setOnMouseDrag([lineFill, &renderer, &controlPoints](Shape* targetShape) {
+                                 std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
+                                 for (int i = 0; i < positions.size(); ++i) {
+                                     lineFill->at(i)->setModelingTransform(glm::translate(glm::mat4(1.0f), positions[i]));
+                                 }
+                             });
                          }
                          target->setColour(glm::vec3(0.741,0.706,0.208));
                      })

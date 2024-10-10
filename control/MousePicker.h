@@ -44,6 +44,7 @@ public:
         glm::vec3 newPosition = computeNewLocation(mousePosX, mousePosY);
         glm::vec3 delta = newPosition - targetShape->getPosition();
         targetShape->updateModellingTransform(glm::translate(glm::mat4(1.0f), delta));
+        targetShape->onDrag();
     }
     
     static glm::vec3 computeNewLocation(double mousePosX, double mousePosY);

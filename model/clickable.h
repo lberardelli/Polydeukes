@@ -18,6 +18,7 @@ protected:
     std::function<void(T*)> hoverCallback = [](T*){};
     std::function<void(T*)> offHoverCallback = [](T*){};
     std::function<void(T*)> onMouseUpCallback = [](T*){};
+    std::function<void(T*)> onMouseDragCallback = [](T*){};
     
 public:
     
@@ -37,6 +38,10 @@ public:
         
     }
     
+    virtual void onDrag() {
+        
+    }
+    
     virtual void setOnClick(std::function<void(T*)> callback) {
         clickCallback = callback;
     }
@@ -51,6 +56,10 @@ public:
     
     virtual void setOnMouseUp(std::function<void(T*)> cb) {
         onMouseUpCallback = cb;
+    }
+    
+    virtual  void setOnMouseDrag(std::function<void(T*)> cb) {
+        onMouseDragCallback = cb;
     }
     
 };

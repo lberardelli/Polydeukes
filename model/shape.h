@@ -162,6 +162,10 @@ public:
         onMouseUpCallback(this);
     }
     
+    virtual void onDrag() override {
+        onMouseDragCallback(this);
+    }
+    
     /*
      To match the rest of the "customization over implementation" idea for these shapes, we need this to compute an AABB
      For any mesh. In fact, maybe the shape class is more a particle class, cause some shapes may not be clickable, e.g....

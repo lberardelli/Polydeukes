@@ -537,9 +537,9 @@ public:
     }
     
     void removeMesh(std::shared_ptr<Shape> shape) {
-        shapes.erase(std::remove_if(shapes.begin(), shapes.end(), [&](auto s) {
-            return shape.get() == s.get();
-        }));
+        shapes.erase(std::remove_if(shapes.begin(), shapes.end(), [&](auto& s) {
+                    return shape.get() == s.get();
+                }), shapes.end());
     }
     
     Scene() = default;
