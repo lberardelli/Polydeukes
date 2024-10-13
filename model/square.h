@@ -52,8 +52,10 @@ public:
         Shape::renderAABB(getAABB(), shaderProgram);
     }
     
-    std::unique_ptr<Shape> clone() override {
-        return std::unique_ptr<Square>(new Square(*this));
+    std::shared_ptr<Shape> clone() override {
+        auto retval = std::shared_ptr<Square>(new Square(*this));
+        retval->referenceToThis = retval;
+        return retval;
     }
     
 };
@@ -77,8 +79,10 @@ protected:
         this->camera = icon.camera;
     }
     
-    std::unique_ptr<Shape> clone() override {
-        return std::unique_ptr<Icon>(new Icon(*this));
+    std::shared_ptr<Shape> clone() override {
+        auto retval =  std::shared_ptr<Icon>(new Icon(*this));
+        retval->referenceToThis = retval;
+        return retval;
     }
     
 public:
@@ -148,12 +152,12 @@ private:
         glEnableVertexAttribArray(2);
     }
     
-    std::unique_ptr<Shape> build() override {
-        return std::unique_ptr<Square>(new Square(VAO, vertices));
+    std::shared_ptr<Shape> build() override {
+        return std::shared_ptr<Square>(new Square(VAO, vertices));
     }
     
-    std::unique_ptr<Shape> buildIcon(Camera* camera) {
-        return std::unique_ptr<Icon>(new Icon(VAO, vertices, camera));
+    std::shared_ptr<Shape> buildIcon(Camera* camera) {
+        return std::shared_ptr<Icon>(new Icon(VAO, vertices, camera));
     }
     
 };
@@ -171,7 +175,7 @@ public:
         shape = squareFactory->build();
     }
     
-    virtual std::unique_ptr<Shape> build() {
+    virtual std::shared_ptr<Shape> build() {
         return shape->clone();
     }
 
@@ -188,7 +192,7 @@ public:
         shape = squareFactory->buildIcon(camera);
     }
     
-    virtual std::unique_ptr<Shape> build() {
+    virtual std::shared_ptr<Shape> build() {
         return shape->clone();
     }
     

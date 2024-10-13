@@ -37,8 +37,10 @@ public:
         
     }
     
-    std::unique_ptr<Shape> clone() override {
-        return std::unique_ptr<Axies>(new Axies(*this));
+    std::shared_ptr<Shape> clone() override {
+        auto retval = std::shared_ptr<Axies>(new Axies(*this));
+        retval->referenceToThis = retval;
+        return retval;
     }
     
     void render(ShaderProgram shaderProgram) override {
@@ -131,8 +133,8 @@ protected:
         }
     }
         
-    std::unique_ptr<Shape> build() override {
-        return std::unique_ptr<Axies>(new Axies(VAO, axis_vertices));
+    std::shared_ptr<Shape> build() override {
+        return std::shared_ptr<Axies>(new Axies(VAO, axis_vertices));
     }
     
 };
@@ -148,7 +150,7 @@ public:
         shape = factory->build();
     }
     
-    virtual std::unique_ptr<Shape> build() {
+    virtual std::shared_ptr<Shape> build() {
         return shape->clone();
     }
 };

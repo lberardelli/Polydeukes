@@ -24,7 +24,7 @@ glm::vec3 MeshDragger::computeNewLocation(double mousePosX, double mousePosY) {
     Ray mouseRay = MousePicker::computeMouseRay(mousePosX, mousePosY);
     //get the plane defined by the camera and the targetShape
     glm::vec3 planeNormal = camera->getDirection();
-    glm::vec3 planeSamplePoint = targetShape->getPosition();
+    glm::vec3 planeSamplePoint = targetShape.lock()->getPosition();
     //ray plane intersection
     return vector::rayPlaneIntersection(Plane(planeNormal, planeSamplePoint), mouseRay);
 }

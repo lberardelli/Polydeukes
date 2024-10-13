@@ -83,8 +83,10 @@ public:
         //Shape::renderAABB(getAABB(), shaderProgram);
     }
     
-    std::unique_ptr<Shape> clone() override {
-        return std::unique_ptr<Cube>(new Cube(*this));
+    std::shared_ptr<Shape> clone() override {
+        auto retval =  std::shared_ptr<Cube>(new Cube(*this));
+        retval->referenceToThis = retval;
+        return retval;
     }
     
 };
@@ -177,8 +179,8 @@ public:
         glEnableVertexAttribArray(2);
     }
     
-    std::unique_ptr<Shape> build() {
-        return std::unique_ptr<Cube>(new Cube(VAO, vertices));
+    std::shared_ptr<Shape> build() {
+        return std::shared_ptr<Cube>(new Cube(VAO, vertices));
     }
     
 };
@@ -196,7 +198,7 @@ public:
         shape = cubeFactory->build();
     }
     
-    virtual std::unique_ptr<Shape> build() {
+    virtual std::shared_ptr<Shape> build() {
         return shape->clone();
     }
 

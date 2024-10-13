@@ -39,8 +39,10 @@ public:
     
     virtual ~Sphere() = default;
     
-    std::unique_ptr<Shape> clone() override {
-        return std::unique_ptr<Sphere>(new Sphere(*this));
+    std::shared_ptr<Shape> clone() override {
+        auto retval = std::shared_ptr<Sphere>(new Sphere(*this));
+        retval->referenceToThis = retval;
+        return retval;
     }
     
     void render(ShaderProgram shaderProgram) override {
@@ -186,8 +188,8 @@ private:
         nIndices = indices.size();
     }
     
-    std::unique_ptr<Shape> build() override {
-        return std::unique_ptr<Sphere>(new Sphere(VAO, vertices.data(), nvertices, nIndices));
+    std::shared_ptr<Shape> build() override {
+        return std::shared_ptr<Sphere>(new Sphere(VAO, vertices.data(), nvertices, nIndices));
     }
     
 };
@@ -218,7 +220,7 @@ public:
         return instance;
     }
     
-    std::unique_ptr<Shape> build() override {
+    std::shared_ptr<Shape> build() override {
         return shape->clone();
     }
     

@@ -36,7 +36,7 @@ class KeyboardController {
 private:
     
     static Renderer* renderer;
-    static std::shared_ptr<Shape> targetShape;
+    static std::weak_ptr<Shape> targetShape;
     static ShapeBuilder* sphereBuilder;
     static ShapeBuilder* cubeBuilder;
     static ShapeBuilder* squareBuilder;
@@ -44,74 +44,74 @@ private:
     static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
     {
         if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
-            targetShape = cubeBuilder->build();
-            Particle particle = Particle(targetShape, .1f);
+            Particle particle = Particle(cubeBuilder->build(), .1f);
             particle.addTensor(&Gravity::update);
             renderer->addParticle(particle);
+            targetShape = particle.getShape();
         }
         else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
-            targetShape = squareBuilder->build();
-            Particle particle = Particle(targetShape, .1f);
+            Particle particle = Particle(squareBuilder->build(), .1f);
             particle.addTensor(&Gravity::update);
             renderer->addParticle(particle);
+            targetShape = particle.getShape();
         }
         else if (key == GLFW_KEY_M && action == GLFW_PRESS) {
-            targetShape = sphereBuilder->build();
-            Particle particle = Particle(targetShape, .1f);
+            Particle particle = Particle(sphereBuilder->build(), .1f);
             particle.addTensor(&Gravity::update);
             renderer->addParticle(particle);
+            targetShape = particle.getShape();
         }
         else if (key == GLFW_KEY_DOWN && action == GLFW_PRESS) {
-            if (targetShape) {
+            if (auto tmp = targetShape.lock()) {
                 glm::vec3 translationVector(0.0f, -1.0f, 0.0f);
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
-                targetShape->translate(translationMatrix);
+                tmp->translate(translationMatrix);
             }
         }
         else if (key == GLFW_KEY_UP && action == GLFW_PRESS) {
-            if (targetShape) {
+            if (auto tmp = targetShape.lock()) {
                 glm::vec3 translationVector(0.0f, 1.0f, 0.0f);
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
-                targetShape->translate(translationMatrix);
+                tmp->translate(translationMatrix);
             }
         }
         else if (key == GLFW_KEY_LEFT && action == GLFW_PRESS) {
-            if (targetShape) {
+            if (auto tmp = targetShape.lock()) {
                 glm::vec3 translationVector(-1.0f, 0.0f, 0.0f);
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
-                targetShape->translate(translationMatrix);
+                tmp->translate(translationMatrix);
             }
         }
         else if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS) {
-            if (targetShape) {
+            if (auto tmp = targetShape.lock()) {
                 glm::vec3 translationVector(1.0f, 0.0f, 0.0f);
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
-                targetShape->translate(translationMatrix);
+                tmp->translate(translationMatrix);
             }
         }
         else if (key == GLFW_KEY_B && action == GLFW_PRESS) {
-            if (targetShape) {
+            if (auto tmp = targetShape.lock()) {
                 glm::vec3 translationVector(0.0f, 0.0f, -1.0f);
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
-                targetShape->translate(translationMatrix);
+                tmp->translate(translationMatrix);
             }
         }
         else if (key == GLFW_KEY_F && action == GLFW_PRESS) {
-            if (targetShape) {
+            if (auto tmp = targetShape.lock()) {
                 glm::vec3 translationVector(0.0f, 0.0f, 1.0f);
                 glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
-                targetShape->translate(translationMatrix);
+                tmp->translate(translationMatrix);
             }
         }
         else if (key == GLFW_KEY_DELETE && action == GLFW_PRESS) {
-            if (targetShape) {
-                renderer->removeShape(targetShape);
-                targetShape = 0;
+            if (auto tmp = targetShape.lock()) {
+                renderer->removeShape(tmp);
+                targetShape.reset();
             }
         }
         else if (key == GLFW_KEY_C && action == GLFW_PRESS) {
-            if (targetShape) {
-                std::shared_ptr<Shape> cpy = targetShape->clone();
+            if (auto tmp = targetShape.lock()) {
+                std::shared_ptr<Shape> cpy = tmp->clone();
                 renderer->addMesh(cpy);
             }
         }
@@ -131,32 +131,30 @@ public:
     void init(Renderer* renderer) {
         glfwSetKeyCallback(window, key_callback);
         KeyboardController::renderer = renderer;
-        sphereBuilder = &SphereBuilder::getInstance()->withOnClickCallback([&](Shape* shape){ this->setTargetShape(shape); })
-        .withOnHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f)); })
-        .withOffHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f, 1.0f,1.0f)); });
+        sphereBuilder = &SphereBuilder::getInstance()->withOnClickCallback([&](std::weak_ptr<Shape> shape){ this->setTargetShape(shape); })
+        .withOnHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f, 0.53f, 0.3f)); })
+        .withOffHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f, 1.0f,1.0f)); });
         cubeBuilder = new CubeBuilder();
         cubeBuilder = &cubeBuilder->withColour(glm::vec3(1.0f,1.0f,1.0f))
-        .withOnClickCallback([&](Shape* shape){ this->setTargetShape(shape); })
-        .withOnHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f)); })
-        .withOffHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f, 1.0f,1.0f)); });
+        .withOnClickCallback([&](std::weak_ptr<Shape> shape){ this->setTargetShape(shape); })
+        .withOnHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f, 0.53f, 0.3f)); })
+        .withOffHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f, 1.0f,1.0f)); });
         squareBuilder = new SquareBuilder();
         squareBuilder = &squareBuilder->withColour(glm::vec3(1.0f,1.0f,1.0f))
-        .withOnClickCallback([&](Shape* shape){ this->setTargetShape(shape); })
-        .withOnHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f)); })
-        .withOffHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f, 1.0f,1.0f)); });
+        .withOnClickCallback([&](std::weak_ptr<Shape> shape){ this->setTargetShape(shape); })
+        .withOnHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f, 0.53f, 0.3f)); })
+        .withOffHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f, 1.0f,1.0f)); });
         mousepicker->enable(window);
     }
     
-    void setTargetShape(Shape* target) {
-        //find the shape in the renderer
-        std::shared_ptr<Shape> result = renderer->getShape(target);
-        targetShape = result;
+    void setTargetShape(std::weak_ptr<Shape> target) {
+        targetShape = target;
     }
     
 };
 
 Camera* MeshDragger::camera{};
-std::shared_ptr<Shape> MeshDragger::targetShape{};
+std::weak_ptr<Shape> MeshDragger::targetShape{};
 Renderer* MeshDragger::renderer{};
 
 
@@ -165,7 +163,7 @@ MeshSpawner* KeyboardController::meshSpawner{};
 MousePicker* KeyboardController::mousepicker{};
 GLFWwindow* KeyboardController::window{};
 Renderer* KeyboardController::renderer{};
-std::shared_ptr<Shape> KeyboardController::targetShape{};
+std::weak_ptr<Shape> KeyboardController::targetShape{};
 ShapeBuilder* KeyboardController::sphereBuilder{};
 ShapeBuilder* KeyboardController::cubeBuilder{};
 ShapeBuilder* KeyboardController::squareBuilder{};
@@ -392,7 +390,7 @@ SceneList getFloor() {
     s1->setModelingTransform(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
     s2->setModelingTransform(glm::rotate(glm::mat4(1.0f), 3.14159f/2.0f, glm::vec3(1.0f,0.0f,0.0f)));
     std::shared_ptr<Shape> cur;
-    std::vector<std::unique_ptr<Shape>> graph{};
+    std::vector<std::shared_ptr<Shape>> graph{};
     for (int i = 0; i < 30; ++i) {
         glm::vec3 translation = glm::vec3(0.0f,0.0f,(float)i);
         for (int j = 0; j < 30; ++j) {
@@ -453,7 +451,7 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
      */
     std::shared_ptr<Shape> secondFloor = SquareBuilder().withColour(glm::vec3(0.9,0.9,0.9)).build();
     KeyboardController controller(secondFloor);
-    secondFloor->setOnClick([&](Shape* shape){
+    secondFloor->setOnClick([&](std::weak_ptr<Shape> shape){
         controller.setTargetShape(shape);
     });
     KeyboardController::arcball = &arcball;
@@ -461,54 +459,54 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
     KeyboardController::mousepicker = &picker;
     KeyboardController::window = window;
     controller.init(&renderer);
-    std::unique_ptr<Shape> cube = CubeBuilder().withOnHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
-    }).withOffHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
-    }).withOnClickCallback([&](Shape* shape){
+    std::shared_ptr<Shape> cube = CubeBuilder().withOnHoverCallback([](std::weak_ptr<Shape> shape) {
+        shape.lock()->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
+    }).withOffHoverCallback([](std::weak_ptr<Shape> shape) {
+        shape.lock()->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
+    }).withOnClickCallback([&](std::weak_ptr<Shape> shape){
         controller.setTargetShape(shape);
     }).build();
-    std::shared_ptr<Shape> springCoil = CubeBuilder().withOnHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(0.9803921568627451,0.7764705882352941,0.03137254901960784)); })
-        .withOffHoverCallback([](Shape* shape) { shape->setColour(glm::vec3(1.0f,1.0f,1.0f)); }).build();
+    std::shared_ptr<Shape> springCoil = CubeBuilder().withOnHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(0.9803921568627451,0.7764705882352941,0.03137254901960784)); })
+        .withOffHoverCallback([](std::weak_ptr<Shape> shape) { shape.lock()->setColour(glm::vec3(1.0f,1.0f,1.0f)); }).build();
     std::shared_ptr<Shape> springCoilCopy = springCoil->clone();
     renderer.addMesh(springCoil); renderer.addMesh(springCoilCopy);
     Spring spring = Spring(0.9f,2, glm::vec3(3.0f,3.0f,0.0), springCoil);
     Spring cielingSpring = Spring(0.9f,1,glm::vec3(10.0f,10.0f,0.0f), springCoilCopy);
     Drag drag = Drag(0.1f,0.1f);
-    std::unique_ptr<Shape> sphere = SphereBuilder::getInstance()->build();
+    std::shared_ptr<Shape> sphere = SphereBuilder::getInstance()->build();
     sphere->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(0.5,0.5,0.5)));
     SceneListBuilder sceneGraphBuilder = SceneListBuilder();
-    sceneGraphBuilder.withOnHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
-    }).withOffHoverCallback([](Shape* shape) {
-        shape->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
-    }).withOnClickCallback([&](Shape* shape){
+    sceneGraphBuilder.withOnHoverCallback([](std::weak_ptr<Shape> shape) {
+        shape.lock()->setColour(glm::vec3(1.0f, 0.53f, 0.3f));
+    }).withOffHoverCallback([](std::weak_ptr<Shape> shape) {
+        shape.lock()->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
+    }).withOnClickCallback([&](std::weak_ptr<Shape> shape){
         controller.setTargetShape(shape);
     });
-    std::unique_ptr<Shape> subGraph = sceneGraphBuilder.build();
-    std::vector<std::unique_ptr<Shape>> tmp;
+    std::shared_ptr<Shape> subGraph = sceneGraphBuilder.build();
+    std::vector<std::shared_ptr<Shape>> tmp;
     tmp.push_back(cube->clone());
     tmp.push_back(AxiesBuilder().build());
     static_cast<SceneList*>(subGraph.get())->addShapes(std::move(tmp));
     static_cast<SceneList*>(subGraph.get())->setPosition(glm::vec3(2.0f,2.0f,2.0f));
-    std::unique_ptr<Shape> otherGraph = sceneGraphBuilder.build();
-    std::vector<std::unique_ptr<Shape>> tmp2;
+    std::shared_ptr<Shape> otherGraph = sceneGraphBuilder.build();
+    std::vector<std::shared_ptr<Shape>> tmp2;
     tmp2.push_back(std::move(sphere));
     tmp2.push_back(AxiesBuilder().build());
     static_cast<SceneList*>(otherGraph.get())->addShapes(std::move(tmp2));
     std::shared_ptr<Shape> springEndSpriteS = sceneGraphBuilder.build();
     std::shared_ptr<SceneList> springEndSprite = std::dynamic_pointer_cast<SceneList>(springEndSpriteS);
-    std::vector<std::unique_ptr<Shape>> tmp3;
+    std::vector<std::shared_ptr<Shape>> tmp3;
     tmp3.push_back(std::move(otherGraph));
     tmp3.push_back(std::move(subGraph));
     springEndSprite->addShapes(std::move(tmp3));
     springEndSprite->setPosition(glm::vec3(10.0f,20.0f,0.0f));
     glm::vec3 lookat = springEndSprite->getPosition() - spring.getFixedPosition();
-    std::unique_ptr<Shape> square = SquareBuilder().build();
+    std::shared_ptr<Shape> square = SquareBuilder().build();
     square->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(6.0f,6.0f,6.0f)));
     std::shared_ptr<Shape> platformGraphS = sceneGraphBuilder.build();
     std::shared_ptr<SceneList> platformGraph = std::dynamic_pointer_cast<SceneList>(platformGraphS);
-    std::vector<std::unique_ptr<Shape>> tmp4;
+    std::vector<std::shared_ptr<Shape>> tmp4;
     tmp4.push_back(std::move(square));
     tmp4.push_back(AxiesBuilder().build());
     platformGraph->addShapes(std::move(tmp4));
@@ -516,7 +514,7 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
     platformGraph->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(3.0f,3.0f,0.0f)));
     std::shared_ptr<Shape> cielingS = sceneGraphBuilder.build();
     std::shared_ptr<SceneList> cieling = std::dynamic_pointer_cast<SceneList>(cielingS);
-    std::vector<std::unique_ptr<Shape>> tmp5;
+    std::vector<std::shared_ptr<Shape>> tmp5;
     tmp5.push_back(SquareBuilder().build());
     tmp5.push_back(AxiesBuilder().build());
     cieling->addShapes(std::move(tmp5));
@@ -618,12 +616,16 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
-        std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).withPosition(position).build();
+        std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f))
+            .withPosition(position).build();
+        controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
+            MeshDragger::registerMousePositionCallback(window, targetShape);
+        });
         renderer.addMesh(controlPoint);
         controlPoints.push_back(controlPoint);
     });
     renderer.addMesh(IconBuilder(&camera)
-                     .withOnClickCallback([&](Shape* target) {
+                     .withOnClickCallback([&](std::weak_ptr<Shape> target) {
                          //compute the interpolating polynomial.
                          std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
                          std::vector<std::shared_ptr<Shape>> fill{};
@@ -633,12 +635,12 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                              renderer.addMesh(notch);
                          }
                          for (auto shape : fill) {
-                             shape->setOnClick([fill](Shape* shape) {
+                             shape->setOnClick([fill](std::weak_ptr<Shape> shape) {
                                  for (auto it : fill) {
                                      it->setColour(glm::vec3(0.5f,0.5f,0.5f));
                                  }
                              });
-                             shape->setOnMouseUp([fill](Shape* shape) {
+                             shape->setOnMouseUp([fill](std::weak_ptr<Shape> shape) {
                                  for (auto it : fill) {
                                      it->setColour(glm::vec3(1.0f,1.0f,1.0f));
                                  }
@@ -647,17 +649,17 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                          auto lineFill = std::make_shared<std::vector<std::shared_ptr<Shape>>>(fill);
 
                          for (auto point : controlPoints) {
-                             point->setOnMouseDrag([lineFill, &renderer, &controlPoints](Shape* targetShape) {
+                             point->setOnMouseDrag([lineFill, &renderer, &controlPoints](std::weak_ptr<Shape> targetShape) {
                                  std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
                                  for (int i = 0; i < positions.size(); ++i) {
                                      lineFill->at(i)->setModelingTransform(glm::translate(glm::mat4(1.0f), positions[i]));
                                  }
                              });
                          }
-                         target->setColour(glm::vec3(0.741,0.706,0.208));
+                         target.lock()->setColour(glm::vec3(0.741,0.706,0.208));
                      })
-                     .withOnMouseUpCallback([](Shape* target) {
-                         target->setColour(glm::vec3(0.212,0.329,0.369));
+                     .withOnMouseUpCallback([](std::weak_ptr<Shape> target) {
+                         target.lock()->setColour(glm::vec3(0.212,0.329,0.369));
                      })
                      .withColour(glm::vec3(0.212,0.329,0.369)).build());
     renderer.addMesh(IconBuilder(&camera).withColour(glm::vec3(0.212,0.329,0.369)).build());
@@ -693,7 +695,7 @@ int main(int argc, const char * argv[]) {
     }
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     
-    renderBasicSplineStudy(window);
+    renderMotionCaptureScene(window);
 
     glfwTerminate();
     return 0;

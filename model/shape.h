@@ -49,6 +49,7 @@ protected:
     glm::vec3 colour = glm::vec3(1.0f, 1.0f, 1.0f);
     unsigned int texture = 0;
     unsigned int AABBVAO, AABBEBO, AABBVBO;
+    std::weak_ptr<Shape> referenceToThis;
   
 public:
     
@@ -115,14 +116,14 @@ public:
         glBindVertexArray(0);
     }
     
-    virtual std::unique_ptr<Shape> clone() = 0;
+    virtual std::shared_ptr<Shape> clone() = 0;
     
     virtual void onHover() override {
-        hoverCallback(this);
+        hoverCallback(referenceToThis);
     }
     
     virtual void offHover() override {
-        offHoverCallback(this);
+        offHoverCallback(referenceToThis);
     }
     
     virtual void setModelingTransform(glm::mat4&& transform) {
@@ -155,15 +156,15 @@ public:
     }
     
     virtual void onClick() override {
-        clickCallback(this);
+        clickCallback(referenceToThis);
     }
     
     virtual void onMouseUp() override {
-        onMouseUpCallback(this);
+        onMouseUpCallback(referenceToThis);
     }
     
     virtual void onDrag() override {
-        onMouseDragCallback(this);
+        onMouseDragCallback(referenceToThis);
     }
     
     /*
@@ -233,13 +234,13 @@ public:
 
 class ShapeFactory {
 public:
-    virtual std::unique_ptr<Shape> build() = 0;
+    virtual std::shared_ptr<Shape> build() = 0;
 };
 
 class ShapeBuilder {
 private:
 protected:
-    std::unique_ptr<Shape> shape{};
+    std::shared_ptr<Shape> shape{};
 public:
     ShapeBuilder& withTexture(std::string&& texture_path) {
         shape->texture = texture::generateTexture(texture_path);
@@ -256,12 +257,12 @@ public:
         return *this;
     }
     
-    ShapeBuilder& withOnMouseUpCallback(std::function<void(Shape*)> callback) {
+    ShapeBuilder& withOnMouseUpCallback(std::function<void(std::weak_ptr<Shape>)> callback) {
         shape->setOnMouseUp(callback);
         return *this;
     }
     
-    ShapeBuilder& withOnClickCallback(std::function<void(Shape*)> callback) {
+    ShapeBuilder& withOnClickCallback(std::function<void(std::weak_ptr<Shape>)> callback) {
         shape->setOnClick(callback);
         return *this;
     }
@@ -276,17 +277,17 @@ public:
         return * this;
     }
     
-    ShapeBuilder& withOnHoverCallback(std::function<void(Shape*)> callback) {
+    ShapeBuilder& withOnHoverCallback(std::function<void(std::weak_ptr<Shape>)> callback) {
         shape->setOnHover(callback);
         return *this;
     }
     
-    ShapeBuilder& withOffHoverCallback(std::function<void(Shape*)> callback) {
+    ShapeBuilder& withOffHoverCallback(std::function<void(std::weak_ptr<Shape>)> callback) {
         shape->setOffHover(callback);
         return *this;
     }
     
-    virtual std::unique_ptr<Shape> build() = 0;
+    virtual std::shared_ptr<Shape> build() = 0;
 };
 
 

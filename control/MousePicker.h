@@ -28,23 +28,23 @@
 
 class MeshDragger {
 private:
-    static std::shared_ptr<Shape> targetShape;
+    static std::weak_ptr<Shape> targetShape;
     
 public:
     
     static Renderer* renderer;
     static Camera* camera;
     
-    static void registerMousePositionCallback(GLFWwindow* window, std::shared_ptr<Shape> shape) {
+    static void registerMousePositionCallback(GLFWwindow* window, std::weak_ptr<Shape> shape) {
         glfwSetCursorPosCallback(window, meshDraggerPositionCallback);
         targetShape = shape;
     }
     
     static void meshDraggerPositionCallback(GLFWwindow* window, double mousePosX, double mousePosY) {
         glm::vec3 newPosition = computeNewLocation(mousePosX, mousePosY);
-        glm::vec3 delta = newPosition - targetShape->getPosition();
-        targetShape->updateModellingTransform(glm::translate(glm::mat4(1.0f), delta));
-        targetShape->onDrag();
+        glm::vec3 delta = newPosition - targetShape.lock()->getPosition();
+        targetShape.lock()->updateModellingTransform(glm::translate(glm::mat4(1.0f), delta));
+        targetShape.lock()->onDrag();
     }
     
     static glm::vec3 computeNewLocation(double mousePosX, double mousePosY);
@@ -208,7 +208,6 @@ private:
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
             if (targetShape) {
                 targetShape->onClick();
-                MeshDragger::registerMousePositionCallback(window, targetShape);
             }
             else {
                 clickCustomization(mousePositionX, mousePositionY);

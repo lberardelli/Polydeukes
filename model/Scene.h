@@ -26,7 +26,7 @@
 
 class SceneListNode {
 public:
-    std::unique_ptr<Shape> data;
+    std::shared_ptr<Shape> data;
     SceneListNode* next = 0;
     
     SceneListNode(SceneListNode& that) {
@@ -71,7 +71,7 @@ public:
         }
     }
     
-    explicit SceneList(std::vector<std::unique_ptr<Shape>>&& source) {
+    explicit SceneList(std::vector<std::shared_ptr<Shape>>&& source) {
         for (auto&& src : source) {
             addShape(std::move(src));
         }
@@ -86,7 +86,7 @@ public:
         }
     }
     
-    void addShape(std::unique_ptr<Shape> shape) {
+    void addShape(std::shared_ptr<Shape> shape) {
         if (!head) {
             SceneListNode* node = new SceneListNode();
             node->data = std::move(shape);
@@ -105,7 +105,7 @@ public:
         }
     }
     
-    void addShapes(std::vector<std::unique_ptr<Shape>>&& shapes) {
+    void addShapes(std::vector<std::shared_ptr<Shape>>&& shapes) {
         for (auto&& shape : shapes) {
             addShape(std::move(shape));
         }
@@ -148,8 +148,10 @@ public:
         Shape::translate(position);
     }
     
-    virtual std::unique_ptr<Shape> clone() override {
-        return std::make_unique<SceneList>(*this);
+    virtual std::shared_ptr<Shape> clone() override {
+        auto retval = std::make_shared<SceneList>(*this);
+        retval->referenceToThis = retval;
+        return retval;
     }
     
     virtual std::vector<glm::vec3> getPositions() override {
@@ -190,7 +192,7 @@ public:
         shape = std::make_unique<SceneList>();
     }
     
-    std::unique_ptr<Shape> build() override {
+    std::shared_ptr<Shape> build() override {
         return shape->clone();
     }
 
@@ -206,8 +208,8 @@ private:
     std::vector<glm::vec3> rotations{};
     std::string name{};
     std::vector<std::string> channels{};
-    std::unique_ptr<Shape> data;
-    std::unique_ptr<Shape> interGeometry{};
+    std::shared_ptr<Shape> data;
+    std::shared_ptr<Shape> interGeometry{};
     SceneGraphNode* parent{};
     std::string rotationOrder{};
     std::string translationOrder{};
@@ -510,8 +512,10 @@ public:
         }
     }
     
-    virtual std::unique_ptr<Shape> clone() override {
-        return std::unique_ptr<SceneGraph>(new SceneGraph(*this));
+    virtual std::shared_ptr<Shape> clone() override {
+        auto retval = std::shared_ptr<SceneGraph>(new SceneGraph(*this));
+        retval->referenceToThis = retval;
+        return retval;
     }
 };
 
