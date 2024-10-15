@@ -60,7 +60,6 @@ public:
     }
     
     virtual ~Shape() {
-        
     }
     
     glm::mat4 getModellingTransform() const {
@@ -155,6 +154,10 @@ public:
         glGenBuffers(1, &AABBVBO);
     }
     
+    virtual void onRightClick() override {
+        rightClickCallback(referenceToThis);
+    }
+    
     virtual void onClick() override {
         clickCallback(referenceToThis);
     }
@@ -165,6 +168,10 @@ public:
     
     virtual void onDrag() override {
         onMouseDragCallback(referenceToThis);
+    }
+    
+    virtual void onRightClickUp() override {
+        rightClickUpCallback(referenceToThis);
     }
     
     /*

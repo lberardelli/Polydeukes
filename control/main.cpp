@@ -155,7 +155,6 @@ public:
 
 Camera* MeshDragger::camera{};
 std::weak_ptr<Shape> MeshDragger::targetShape{};
-Renderer* MeshDragger::renderer{};
 
 
 Arcball* KeyboardController::arcball{};
@@ -434,7 +433,6 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
         arcball.registerRotationCallback(window, mosPosx, mosPosy);
     });
     MeshDragger::camera = &camera;
-    MeshDragger::renderer = &renderer;
     /*
      TODO: needing to pass the same camera to the renderer and the arcball is bad.
      Should be injecting a rendering data package to the renderer from the control as needed.
@@ -571,20 +569,14 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_ptr<Shape>>& controlPoints, Renderer& renderer) {
-    glm::mat4 constraintMatrix = glm::mat4(
-            1.0f, 0.0f,   0.0f,     0.0f,
-            1.0f, 1.0f/3.0f, 1.0f/9.0f, 1.0f/27.0f,
-            1.0f, 2.0f/3.0f, 4.0f/9.0f, 8.0f/27.0f,
-            1.0f, 1.0f,   1.0f,    1.0f
-        );
+std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
     glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
     glm::mat4x3 result;
     for (int i = 0; i < 4; ++i) {
         glm::vec4 row = blendingMatrix[i];
         glm::vec3 accum = glm::vec3(0.0f,0.0f,0.0f);
         for (int j = 0; j < 4; ++j) {
-             accum += row[j] * controlPoints[j]->getPosition();
+            accum += row[j] * controlPoints[j];
         }
         result[i] = accum;
     }
@@ -601,6 +593,29 @@ std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_pt
     return positions;
 }
 
+std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
+    glm::mat4 constraintMatrix = glm::mat4(
+            1.0f, 0.0f,   0.0f,     0.0f,
+            1.0f, 1.0f/3.0f, 1.0f/9.0f, 1.0f/27.0f,
+            1.0f, 2.0f/3.0f, 4.0f/9.0f, 8.0f/27.0f,
+            1.0f, 1.0f,   1.0f,    1.0f
+        );
+    return computeFillPositions(constraintMatrix, controlPoints, renderer);
+}
+
+std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_ptr<Shape>>& controlPoints, Renderer& renderer) {
+    std::vector<glm::vec3> controlPointPositions{};
+    for (auto controlPoint : controlPoints) {
+        controlPointPositions.push_back(controlPoint->getPosition());
+    }
+    return computeInterpolatingPolynomial(controlPointPositions, renderer);
+}
+
+std::vector<glm::vec3> computeHermiteSpline(std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
+    glm::mat4 constrainMatrix = glm::mat4(1.f,0.f,0.f,0.f,0.f,1.f,0.f,0.f,1.f,1.f,1.f,1.f,0.f,1.f,2.f,3.f);
+    return computeFillPositions(constrainMatrix, controlPoints, renderer);
+}
+
 
 void renderBasicSplineStudy(GLFWwindow* window) {
     //Need tooling to change the interpolation strategy.
@@ -613,16 +628,35 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     
     Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
     std::vector<std::shared_ptr<Shape>> controlPoints{};
+    std::vector<glm::vec3> hermiteControlPoints{};
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
         std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f))
             .withPosition(position).build();
+        controlPoints.push_back(controlPoint);
         controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
             MeshDragger::registerMousePositionCallback(window, targetShape);
         });
+        controlPoint->setOnRightClick([&](std::weak_ptr<Shape> targetShape){
+            glm::vec3 startPosition = targetShape.lock()->getPosition();
+            std::shared_ptr<Shape> tmp = CubeBuilder()
+                .withPosition(targetShape.lock()->getPosition())
+                .withOnClickCallback([&window, startPosition](std::weak_ptr<Shape> theShape) {
+                    LineDrawer::registerMousePositionCallback(window, startPosition, theShape);
+                })
+                .build();
+            renderer.addMesh(tmp);
+            LineDrawer::lineData.startPosition = targetShape.lock()->getPosition();
+            LineDrawer::registerMousePositionCallback(window, targetShape, tmp);
+            controlPoints.push_back(tmp);
+        });
+        controlPoint->setOnRightClickUp([&](std::weak_ptr<Shape> theShape) {
+            LineDrawer::LineData lineData = LineDrawer::getMostRecentLineData();
+            hermiteControlPoints.push_back(lineData.startPosition);
+            hermiteControlPoints.push_back(lineData.endPosition - lineData.startPosition);
+        });
         renderer.addMesh(controlPoint);
-        controlPoints.push_back(controlPoint);
     });
     renderer.addMesh(IconBuilder(&camera)
                      .withOnClickCallback([&](std::weak_ptr<Shape> target) {
@@ -662,10 +696,44 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                          target.lock()->setColour(glm::vec3(0.212,0.329,0.369));
                      })
                      .withColour(glm::vec3(0.212,0.329,0.369)).build());
-    renderer.addMesh(IconBuilder(&camera).withColour(glm::vec3(0.212,0.329,0.369)).build());
+    renderer.addMesh(IconBuilder(&camera)
+                     .withOnClickCallback([&](std::weak_ptr<Shape> target) {
+                         std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
+                         std::vector<std::shared_ptr<Shape>> fill{};
+                         for (auto pos : positions) {
+                             std::shared_ptr<Shape> notch = SquareBuilder().withPosition(pos).withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+                             notch->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
+                             fill.push_back(notch);
+                             renderer.addMesh(notch);
+                         }
+                     }).withColour(glm::vec3(0.212,0.329,0.369)).build());
+    renderer.addMesh(IconBuilder(&camera)
+                     .withOnClickCallback([&](std::weak_ptr<Shape> the_icon) {
+                         std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
+                         std::vector<std::shared_ptr<Shape>> fill{};
+                         for (auto pos : positions) {
+                             std::shared_ptr<Shape> notch = SquareBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+                             notch->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                             notch->updateModellingTransform(glm::translate(glm::mat4(1.0f), pos));
+                             fill.push_back(notch);
+                             renderer.addMesh(notch);
+                         }
+                         auto lineFill = std::make_shared<std::vector<std::shared_ptr<Shape>>>(fill);
+                         for (int i = 1; i < 5; i+=2) {
+                             auto point = controlPoints[i];
+                             point->setOnMouseDrag([lineFill, &renderer, &controlPoints, i, &hermiteControlPoints](std::weak_ptr<Shape> targetShape) {
+                                 hermiteControlPoints[i] = LineDrawer::lineData.endPosition - LineDrawer::lineData.startPosition;
+                                 std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
+                                 for (int j = 0; j < positions.size(); ++j) {
+                                     lineFill->at(j)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                                     lineFill->at(j)->updateModellingTransform(glm::translate(glm::mat4(1.0f), positions[j]));
+                                 }
+                             });
+                         }
+                    }).withColour(glm::vec3(0.212,0.329,0.369)).build());
     picker.enable(window);
     MeshDragger::camera = &camera;
-    MeshDragger::renderer = &renderer;
+    LineDrawer::camera = &camera;
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -695,7 +763,7 @@ int main(int argc, const char * argv[]) {
     }
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     
-    renderMotionCaptureScene(window);
+    renderBasicSplineStudy(window);
 
     glfwTerminate();
     return 0;

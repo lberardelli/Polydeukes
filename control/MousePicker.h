@@ -32,7 +32,6 @@ private:
     
 public:
     
-    static Renderer* renderer;
     static Camera* camera;
     
     static void registerMousePositionCallback(GLFWwindow* window, std::weak_ptr<Shape> shape) {
@@ -49,14 +48,48 @@ public:
     
     static glm::vec3 computeNewLocation(double mousePosX, double mousePosY);
     
-    static void setTargetShape(Shape* shape) {
-        std::shared_ptr<Shape> result = renderer->getShape(shape);
-        targetShape = result;
-    }
-    
     MeshDragger(Camera* camera, Renderer* renderer) {
         MeshDragger::camera = camera;
-        MeshDragger::renderer = renderer;
+    }
+};
+
+class LineDrawer {
+    
+public:
+    struct LineData {
+        std::weak_ptr<Shape> geometry;
+        glm::vec3 startPosition;
+        glm::vec3 endPosition;
+    };
+    
+    static Camera* camera;
+    static LineData lineData;
+    
+    static glm::vec3 computeNewLocation(double mousePosX, double mousePosY, glm::vec3 initialPosition);
+    
+    static void registerMousePositionCallback(GLFWwindow* window, glm::vec3 startPosition, std::weak_ptr<Shape> geometry) {
+        glfwSetCursorPosCallback(window, lineDrawerPositionCallback);
+        lineData.startPosition = startPosition;
+        lineData.geometry = geometry;
+    }
+    
+    static void registerMousePositionCallback(GLFWwindow* window, std::weak_ptr<Shape> shape, std::weak_ptr<Shape> geometry) {
+        registerMousePositionCallback(window, shape.lock()->getPosition(), geometry);
+    }
+    
+    static void lineDrawerPositionCallback(GLFWwindow* window, double mousePosX, double mousePosY) {
+        glm::vec3 newPosition = LineDrawer::computeNewLocation(mousePosX, mousePosY, lineData.startPosition);
+        lineData.endPosition = newPosition;
+        lineData.geometry.lock()->setModelingTransform(vector::scaleGeometryBetweenTwoPointsTransformation(newPosition, lineData.startPosition));
+        lineData.geometry.lock()->onDrag();
+    }
+    
+    static LineData getMostRecentLineData() {
+        return lineData;
+    }
+    
+    LineDrawer(Camera* camera) {
+        MeshDragger::camera = camera;
     }
 };
 
@@ -217,6 +250,17 @@ private:
             glfwSetCursorPosCallback(window, mouse_position_callback);
             if (targetShape) {
                 targetShape->onMouseUp();
+            }
+        }
+        if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
+            if (targetShape) {
+                targetShape->onRightClick();
+            }
+        }
+        if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE) {
+            glfwSetCursorPosCallback(window, mouse_position_callback);
+            if (targetShape) {
+                targetShape->onRightClickUp();
             }
         }
     }

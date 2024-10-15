@@ -19,10 +19,16 @@ protected:
     std::function<void(std::weak_ptr<T>)> offHoverCallback = [](std::weak_ptr<T>){};
     std::function<void(std::weak_ptr<T>)> onMouseUpCallback = [](std::weak_ptr<T>){};
     std::function<void(std::weak_ptr<T>)> onMouseDragCallback = [](std::weak_ptr<T>){};
+    std::function<void(std::weak_ptr<T>)> rightClickCallback = [](std::weak_ptr<T>){};
+    std::function<void(std::weak_ptr<T>)> rightClickUpCallback = [](std::weak_ptr<T>){};
     
 public:
     
     virtual void onClick() {
+        
+    }
+    
+    virtual void onRightClick() {
         
     }
     
@@ -42,8 +48,20 @@ public:
         
     }
     
+    virtual void onRightClickUp() {
+        
+    }
+    
     virtual void setOnClick(std::function<void(std::weak_ptr<T>)> callback) {
         clickCallback = callback;
+    }
+    
+    virtual void setOnRightClick(std::function<void(std::weak_ptr<T>)> cb) {
+        rightClickCallback = cb;
+    }
+    
+    virtual void setOnRightClickUp(std::function<void(std::weak_ptr<T>)> cb) {
+        rightClickUpCallback = cb;
     }
     
     virtual void setOnHover(std::function<void(std::weak_ptr<T>)> cb) {
