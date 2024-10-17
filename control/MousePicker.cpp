@@ -16,9 +16,11 @@ Renderer* MousePicker::renderer{};
 Camera* MousePicker::camera{};
 Scene* MousePicker::theScene{};
 std::shared_ptr<Shape> MousePicker::targetShape{};
+std::shared_ptr<Shape> MousePicker::currentlySelectedShape{};
 std::function<void(double,double)> MousePicker::clickCustomization{};
 Camera* LineDrawer::camera;
 LineDrawer::LineData LineDrawer::lineData{};
+std::vector<std::weak_ptr<Shape>> MeshDragger::passengers{};
 
 glm::vec3 MeshDragger::computeNewLocation(double mousePosX, double mousePosY) {
     //get the mouse ray

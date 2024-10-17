@@ -29,6 +29,7 @@
 class MeshDragger {
 private:
     static std::weak_ptr<Shape> targetShape;
+    static std::vector<std::weak_ptr<Shape>> passengers;
     
 public:
     
@@ -39,11 +40,20 @@ public:
         targetShape = shape;
     }
     
+    static void registerMousePositionCallback(GLFWwindow* window, std::weak_ptr<Shape> shape, std::vector<std::weak_ptr<Shape>> passengers) {
+        glfwSetCursorPosCallback(window, meshDraggerPositionCallback);
+        targetShape = shape;
+        MeshDragger::passengers = passengers;
+    }
+    
     static void meshDraggerPositionCallback(GLFWwindow* window, double mousePosX, double mousePosY) {
         glm::vec3 newPosition = computeNewLocation(mousePosX, mousePosY);
         glm::vec3 delta = newPosition - targetShape.lock()->getPosition();
         targetShape.lock()->updateModellingTransform(glm::translate(glm::mat4(1.0f), delta));
         targetShape.lock()->onDrag();
+        for (auto passenger : passengers) {
+            passenger.lock()->updateModellingTransform(glm::translate(glm::mat4(1.0f), delta));
+        }
     }
     
     static glm::vec3 computeNewLocation(double mousePosX, double mousePosY);
@@ -136,6 +146,7 @@ private:
     static int mousePositionY;
     static Ray ray;
     static std::shared_ptr<Shape> targetShape;
+    static std::shared_ptr<Shape> currentlySelectedShape;
     static std::function<void(double,double)> clickCustomization;
     
     static void computeWorldRay() {
@@ -240,6 +251,7 @@ private:
     static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
             if (targetShape) {
+                currentlySelectedShape = targetShape;
                 targetShape->onClick();
             }
             else {
@@ -248,19 +260,25 @@ private:
         }
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
             glfwSetCursorPosCallback(window, mouse_position_callback);
-            if (targetShape) {
-                targetShape->onMouseUp();
+            if (currentlySelectedShape) {
+                currentlySelectedShape->onMouseUp();
+                currentlySelectedShape.reset();
             }
         }
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
             if (targetShape) {
+                currentlySelectedShape = targetShape;
                 targetShape->onRightClick();
+            }
+            else {
+                
             }
         }
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE) {
             glfwSetCursorPosCallback(window, mouse_position_callback);
-            if (targetShape) {
-                targetShape->onRightClickUp();
+            if (currentlySelectedShape) {
+                currentlySelectedShape->onRightClickUp();
+                currentlySelectedShape.reset();
             }
         }
     }

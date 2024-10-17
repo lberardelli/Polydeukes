@@ -569,6 +569,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+//TODO: Make a switch to go between 2d and 3d modes
 std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
     glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
     glm::mat4x3 result;
@@ -581,7 +582,7 @@ std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vec
         result[i] = accum;
     }
     std::vector<glm::vec3> positions{};
-    for (float i = 0.f; i < 1.00f; i += 0.001) {
+    for (float i = 0.f; i < 1.00f; i += 0.01) {
         glm::vec3 value = glm::vec3(0.0f,0.0f,0.0f);
         glm::vec4 u = glm::vec4(1.0f,i,i*i, i*i*i);
         for (int j = 0; j < 4; ++j) {
@@ -611,15 +612,37 @@ std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_pt
     return computeInterpolatingPolynomial(controlPointPositions, renderer);
 }
 
-std::vector<glm::vec3> computeHermiteSpline(std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
+struct HermiteControlPoint {
+    std::shared_ptr<Shape> locationSprite;
+    std::shared_ptr<Shape> rateOfChangeSprite;
+    glm::vec3 rateOfChange;
+    
+    HermiteControlPoint(std::shared_ptr<Shape> locationSprite, std::shared_ptr<Shape> geo, glm::vec3 rateOfChange) : locationSprite(locationSprite), rateOfChangeSprite(geo), rateOfChange(rateOfChange) {}
+};
+
+std::vector<glm::vec3> computeHermiteSpline(std::vector<HermiteControlPoint>& controlPoints, Renderer& renderer) {
     glm::mat4 constrainMatrix = glm::mat4(1.f,0.f,0.f,0.f,0.f,1.f,0.f,0.f,1.f,1.f,1.f,1.f,0.f,1.f,2.f,3.f);
-    return computeFillPositions(constrainMatrix, controlPoints, renderer);
+    std::vector<glm::vec3> rawPoints{};
+    unsigned long nSegments = controlPoints.size() - 1;
+    std::vector<glm::vec3> fillPoints{};
+    for (int i = 0; i < nSegments; ++i) {
+        rawPoints.push_back(controlPoints[i].locationSprite->getPosition());
+        rawPoints.push_back(controlPoints[i].rateOfChange);
+        rawPoints.push_back(controlPoints[i+1].locationSprite->getPosition());
+        rawPoints.push_back(controlPoints[i+1].rateOfChange);
+        std::vector<glm::vec3> fills = computeFillPositions(constrainMatrix, rawPoints, renderer);
+        for (auto fill : fills) {
+            fillPoints.push_back(fill);
+        }
+        rawPoints.clear();
+    }
+    return fillPoints;
 }
 
 
 void renderBasicSplineStudy(GLFWwindow* window) {
     //Need tooling to change the interpolation strategy.
-    //This tooling can engage certain "modes" required for the interpolation strategy e.g. points and tangents for bezier strategy.
+    //This tooling can engage certain "modes" required for the interpolation strategy e.g. points and tangents for hermite strategy.
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
@@ -628,7 +651,7 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     
     Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
     std::vector<std::shared_ptr<Shape>> controlPoints{};
-    std::vector<glm::vec3> hermiteControlPoints{};
+    std::vector<HermiteControlPoint> hermiteControlPoints{};
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
@@ -639,22 +662,24 @@ void renderBasicSplineStudy(GLFWwindow* window) {
             MeshDragger::registerMousePositionCallback(window, targetShape);
         });
         controlPoint->setOnRightClick([&](std::weak_ptr<Shape> targetShape){
-            glm::vec3 startPosition = targetShape.lock()->getPosition();
             std::shared_ptr<Shape> tmp = CubeBuilder()
                 .withPosition(targetShape.lock()->getPosition())
-                .withOnClickCallback([&window, startPosition](std::weak_ptr<Shape> theShape) {
-                    LineDrawer::registerMousePositionCallback(window, startPosition, theShape);
+                .withOnClickCallback([&window, targetShape](std::weak_ptr<Shape> theShape) {
+                    LineDrawer::registerMousePositionCallback(window, targetShape.lock()->getPosition(), theShape);
                 })
                 .build();
             renderer.addMesh(tmp);
             LineDrawer::lineData.startPosition = targetShape.lock()->getPosition();
             LineDrawer::registerMousePositionCallback(window, targetShape, tmp);
-            controlPoints.push_back(tmp);
+            targetShape.lock()->setOnClick([&window, tmp](std::weak_ptr<Shape> targetShape){
+                std::vector<std::weak_ptr<Shape>> passengers{};
+                passengers.push_back(tmp);
+                MeshDragger::registerMousePositionCallback(window, targetShape, passengers);
+            });
         });
         controlPoint->setOnRightClickUp([&](std::weak_ptr<Shape> theShape) {
             LineDrawer::LineData lineData = LineDrawer::getMostRecentLineData();
-            hermiteControlPoints.push_back(lineData.startPosition);
-            hermiteControlPoints.push_back(lineData.endPosition - lineData.startPosition);
+            hermiteControlPoints.push_back(HermiteControlPoint(theShape.lock(), lineData.geometry.lock(), lineData.endPosition-lineData.startPosition));
         });
         renderer.addMesh(controlPoint);
     });
@@ -719,10 +744,18 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                              renderer.addMesh(notch);
                          }
                          auto lineFill = std::make_shared<std::vector<std::shared_ptr<Shape>>>(fill);
-                         for (int i = 1; i < 5; i+=2) {
-                             auto point = controlPoints[i];
-                             point->setOnMouseDrag([lineFill, &renderer, &controlPoints, i, &hermiteControlPoints](std::weak_ptr<Shape> targetShape) {
-                                 hermiteControlPoints[i] = LineDrawer::lineData.endPosition - LineDrawer::lineData.startPosition;
+                         for (int i = 0; i < hermiteControlPoints.size(); i+=1) {
+                             auto point = hermiteControlPoints[i];
+                             point.rateOfChangeSprite->setOnMouseDrag([lineFill, &renderer, i, &hermiteControlPoints](std::weak_ptr<Shape> targetShape) {
+                                 hermiteControlPoints[i].rateOfChange = LineDrawer::lineData.endPosition - LineDrawer::lineData.startPosition;
+                                 std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
+                                 for (int j = 0; j < positions.size(); ++j) {
+                                     lineFill->at(j)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                                     lineFill->at(j)->updateModellingTransform(glm::translate(glm::mat4(1.0f), positions[j]));
+                                 }
+                             });
+                             point.locationSprite->setOnMouseDrag([lineFill, &renderer, i, &hermiteControlPoints](std::weak_ptr<Shape> targetShape) {
+                                 //TODO: Optimize to account for local control.
                                  std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
                                  for (int j = 0; j < positions.size(); ++j) {
                                      lineFill->at(j)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
@@ -731,6 +764,22 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                              });
                          }
                     }).withColour(glm::vec3(0.212,0.329,0.369)).build());
+    bool bHidden = false;
+    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+        if (bHidden) {
+            for (auto controlPoint : hermiteControlPoints) {
+                renderer.addMesh(controlPoint.locationSprite);
+                renderer.addMesh(controlPoint.rateOfChangeSprite);
+            }
+        }
+        else {
+            for (auto controlPoint : hermiteControlPoints) {
+                renderer.removeShape(controlPoint.locationSprite);
+                renderer.removeShape(controlPoint.rateOfChangeSprite);
+            }
+        }
+        bHidden = !bHidden;
+    }).build());
     picker.enable(window);
     MeshDragger::camera = &camera;
     LineDrawer::camera = &camera;
