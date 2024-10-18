@@ -569,8 +569,10 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+int GRANULARITY = 100;
+
 //TODO: Make a switch to go between 2d and 3d modes
-std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
+std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints) {
     glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
     glm::mat4x3 result;
     for (int i = 0; i < 4; ++i) {
@@ -582,34 +584,36 @@ std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vec
         result[i] = accum;
     }
     std::vector<glm::vec3> positions{};
-    for (float i = 0.f; i < 1.00f; i += 0.01) {
+    float inc = 0.f;
+    for (int i = 0; i < GRANULARITY; i += 1) {
         glm::vec3 value = glm::vec3(0.0f,0.0f,0.0f);
-        glm::vec4 u = glm::vec4(1.0f,i,i*i, i*i*i);
+        glm::vec4 u = glm::vec4(1.0f,inc,inc*inc, inc*inc*inc);
         for (int j = 0; j < 4; ++j) {
             glm::vec3 row = result[j];
             value += u[j] * row;
         }
+        inc+=1.f/(float)GRANULARITY;
         positions.push_back(value);
     }
     return positions;
 }
 
-std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<glm::vec3>& controlPoints, Renderer& renderer) {
+std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<glm::vec3>& controlPoints) {
     glm::mat4 constraintMatrix = glm::mat4(
             1.0f, 0.0f,   0.0f,     0.0f,
             1.0f, 1.0f/3.0f, 1.0f/9.0f, 1.0f/27.0f,
             1.0f, 2.0f/3.0f, 4.0f/9.0f, 8.0f/27.0f,
             1.0f, 1.0f,   1.0f,    1.0f
         );
-    return computeFillPositions(constraintMatrix, controlPoints, renderer);
+    return computeFillPositions(constraintMatrix, controlPoints);
 }
 
-std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_ptr<Shape>>& controlPoints, Renderer& renderer) {
+std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_ptr<Shape>>& controlPoints) {
     std::vector<glm::vec3> controlPointPositions{};
     for (auto controlPoint : controlPoints) {
         controlPointPositions.push_back(controlPoint->getPosition());
     }
-    return computeInterpolatingPolynomial(controlPointPositions, renderer);
+    return computeInterpolatingPolynomial(controlPointPositions);
 }
 
 struct HermiteControlPoint {
@@ -620,7 +624,7 @@ struct HermiteControlPoint {
     HermiteControlPoint(std::shared_ptr<Shape> locationSprite, std::shared_ptr<Shape> geo, glm::vec3 rateOfChange) : locationSprite(locationSprite), rateOfChangeSprite(geo), rateOfChange(rateOfChange) {}
 };
 
-std::vector<glm::vec3> computeHermiteSpline(std::vector<HermiteControlPoint>& controlPoints, Renderer& renderer) {
+std::vector<glm::vec3> computeHermiteSpline(std::vector<HermiteControlPoint>& controlPoints) {
     glm::mat4 constrainMatrix = glm::mat4(1.f,0.f,0.f,0.f,0.f,1.f,0.f,0.f,1.f,1.f,1.f,1.f,0.f,1.f,2.f,3.f);
     std::vector<glm::vec3> rawPoints{};
     unsigned long nSegments = controlPoints.size() - 1;
@@ -630,13 +634,58 @@ std::vector<glm::vec3> computeHermiteSpline(std::vector<HermiteControlPoint>& co
         rawPoints.push_back(controlPoints[i].rateOfChange);
         rawPoints.push_back(controlPoints[i+1].locationSprite->getPosition());
         rawPoints.push_back(controlPoints[i+1].rateOfChange);
-        std::vector<glm::vec3> fills = computeFillPositions(constrainMatrix, rawPoints, renderer);
+        std::vector<glm::vec3> fills = computeFillPositions(constrainMatrix, rawPoints);
         for (auto fill : fills) {
             fillPoints.push_back(fill);
         }
         rawPoints.clear();
     }
     return fillPoints;
+}
+
+struct LocationIndexPairs {
+    std::vector<glm::vec3> locations{};
+    std::vector<int> indices{};
+};
+
+LocationIndexPairs updateHermiteSpline(std::vector<HermiteControlPoint>& controlPoints, std::shared_ptr<Shape> targetShape) {
+    std::vector<HermiteControlPoint> localControlPoints{};
+    std::vector<int> indicesToUpdate{};
+    for (int i = 0; i < controlPoints.size(); ++i) {
+        if (i == 0) {
+            if (controlPoints[i].locationSprite.get() == targetShape.get() || controlPoints[i].rateOfChangeSprite.get() == targetShape.get()) {
+                localControlPoints.push_back(controlPoints[i]);
+                localControlPoints.push_back(controlPoints[i+1]);
+                for (int i = 0; i < GRANULARITY; ++i) {
+                    indicesToUpdate.push_back(i);
+                }
+            }
+        }
+        else if (i == controlPoints.size()-1) {
+            if (controlPoints[i].locationSprite.get() == targetShape.get() || controlPoints[i].rateOfChangeSprite.get() == targetShape.get()) {
+                localControlPoints.push_back(controlPoints[i-1]);
+                localControlPoints.push_back(controlPoints[i]);
+                for (int j = (i-1) * GRANULARITY; j < (i-1) * GRANULARITY + GRANULARITY; ++j) {
+                    indicesToUpdate.push_back(j);
+                }
+            }
+        }
+        else {
+            if (controlPoints[i].locationSprite.get() == targetShape.get() || controlPoints[i].rateOfChangeSprite.get() == targetShape.get()) {
+                localControlPoints.push_back(controlPoints[i-1]);
+                localControlPoints.push_back(controlPoints[i]);
+                localControlPoints.push_back(controlPoints[i+1]);
+                for (int j = (i-1) * GRANULARITY; j < i * GRANULARITY + GRANULARITY; ++j) {
+                    indicesToUpdate.push_back(j);
+                }
+            }
+        }
+    }
+    std::vector<glm::vec3> locations = computeHermiteSpline(localControlPoints);
+    LocationIndexPairs pairs{};
+    pairs.indices = indicesToUpdate;
+    pairs.locations = locations;
+    return pairs;
 }
 
 
@@ -686,7 +735,7 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     renderer.addMesh(IconBuilder(&camera)
                      .withOnClickCallback([&](std::weak_ptr<Shape> target) {
                          //compute the interpolating polynomial.
-                         std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
+                         std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints);
                          std::vector<std::shared_ptr<Shape>> fill{};
                          for (auto pos : positions) {
                              std::shared_ptr<Shape> notch = SquareBuilder().withPosition(pos).withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
@@ -709,7 +758,7 @@ void renderBasicSplineStudy(GLFWwindow* window) {
 
                          for (auto point : controlPoints) {
                              point->setOnMouseDrag([lineFill, &renderer, &controlPoints](std::weak_ptr<Shape> targetShape) {
-                                 std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
+                                 std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints);
                                  for (int i = 0; i < positions.size(); ++i) {
                                      lineFill->at(i)->setModelingTransform(glm::translate(glm::mat4(1.0f), positions[i]));
                                  }
@@ -723,7 +772,7 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                      .withColour(glm::vec3(0.212,0.329,0.369)).build());
     renderer.addMesh(IconBuilder(&camera)
                      .withOnClickCallback([&](std::weak_ptr<Shape> target) {
-                         std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints, renderer);
+                         std::vector<glm::vec3> positions = computeInterpolatingPolynomial(controlPoints);
                          std::vector<std::shared_ptr<Shape>> fill{};
                          for (auto pos : positions) {
                              std::shared_ptr<Shape> notch = SquareBuilder().withPosition(pos).withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
@@ -734,7 +783,7 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                      }).withColour(glm::vec3(0.212,0.329,0.369)).build());
     renderer.addMesh(IconBuilder(&camera)
                      .withOnClickCallback([&](std::weak_ptr<Shape> the_icon) {
-                         std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
+                         std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints);
                          std::vector<std::shared_ptr<Shape>> fill{};
                          for (auto pos : positions) {
                              std::shared_ptr<Shape> notch = SquareBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
@@ -748,18 +797,21 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                              auto point = hermiteControlPoints[i];
                              point.rateOfChangeSprite->setOnMouseDrag([lineFill, &renderer, i, &hermiteControlPoints](std::weak_ptr<Shape> targetShape) {
                                  hermiteControlPoints[i].rateOfChange = LineDrawer::lineData.endPosition - LineDrawer::lineData.startPosition;
-                                 std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
-                                 for (int j = 0; j < positions.size(); ++j) {
-                                     lineFill->at(j)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
-                                     lineFill->at(j)->updateModellingTransform(glm::translate(glm::mat4(1.0f), positions[j]));
+                                 LocationIndexPairs pairs = updateHermiteSpline(hermiteControlPoints, targetShape.lock());
+                                 int j = 0;
+                                 for (auto i : pairs.indices) {
+                                     lineFill->at(i)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                                     lineFill->at(i)->updateModellingTransform(glm::translate(glm::mat4(1.0f), pairs.locations[j]));
+                                     ++j;
                                  }
                              });
                              point.locationSprite->setOnMouseDrag([lineFill, &renderer, i, &hermiteControlPoints](std::weak_ptr<Shape> targetShape) {
-                                 //TODO: Optimize to account for local control.
-                                 std::vector<glm::vec3> positions = computeHermiteSpline(hermiteControlPoints, renderer);
-                                 for (int j = 0; j < positions.size(); ++j) {
-                                     lineFill->at(j)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
-                                     lineFill->at(j)->updateModellingTransform(glm::translate(glm::mat4(1.0f), positions[j]));
+                                 LocationIndexPairs pairs = updateHermiteSpline(hermiteControlPoints, targetShape.lock());
+                                 int j = 0;
+                                 for (auto i : pairs.indices) {
+                                     lineFill->at(i)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                                     lineFill->at(i)->updateModellingTransform(glm::translate(glm::mat4(1.0f), pairs.locations[j]));
+                                     ++j;
                                  }
                              });
                          }
