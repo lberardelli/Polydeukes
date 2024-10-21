@@ -616,6 +616,31 @@ std::vector<glm::vec3> computeInterpolatingPolynomial(std::vector<std::shared_pt
     return computeInterpolatingPolynomial(controlPointPositions);
 }
 
+std::vector<glm::vec3> computeBezierCurve(std::vector<std::shared_ptr<Shape>>& controlPoints) {
+    std::array<std::shared_ptr<Shape>, 4> currentCurve;
+    std::vector<glm::vec3> positions{};
+    for (int i = 0; i < controlPoints.size()-3; i+=3) {
+        controlPoints[i+1]->setColour(glm::vec3(1.0f,0.0f,0.0f));
+        controlPoints[i+2]->setColour(glm::vec3(1.0f,0.f,0.f));
+        currentCurve[0] = controlPoints[i];
+        currentCurve[1] = controlPoints[i+1];
+        currentCurve[2] = controlPoints[i+2];
+        currentCurve[3] = controlPoints[i+3];
+        float parameterValue = 0.f;
+        for (int j = 0; j < 101; ++j) {
+            glm::vec3 firstInterpolatedValue = currentCurve[1]->getPosition()*(parameterValue) + currentCurve[0]->getPosition() * (1.f-parameterValue);
+            glm::vec3 secondInterpolatedValue = currentCurve[2]->getPosition()*(parameterValue) + currentCurve[1]->getPosition() * (1.f-parameterValue);
+            glm::vec3 thirdInterpolatedValue = currentCurve[3]->getPosition()*(parameterValue) + currentCurve[2]->getPosition() * (1.f-parameterValue);
+            glm::vec3 secondFirstIV = secondInterpolatedValue*(parameterValue) + firstInterpolatedValue*(1.f-parameterValue);
+            glm::vec3 secondsecondIV = thirdInterpolatedValue*(parameterValue) + secondInterpolatedValue*(1.f-parameterValue);
+            glm::vec3 thirdFirstIV = secondsecondIV * (parameterValue) + secondFirstIV * (1.f-parameterValue);
+            positions.push_back(thirdFirstIV);
+            parameterValue += 0.01f;
+        }
+    }
+    return positions;
+}
+
 struct HermiteControlPoint {
     std::shared_ptr<Shape> locationSprite;
     std::shared_ptr<Shape> rateOfChangeSprite;
@@ -816,6 +841,27 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                              });
                          }
                     }).withColour(glm::vec3(0.212,0.329,0.369)).build());
+    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon){
+        std::vector<glm::vec3> positions = computeBezierCurve(controlPoints);
+        std::vector<std::shared_ptr<Shape>> lineFill{};
+        for (auto pos : positions) {
+            std::shared_ptr<Shape> fillShape = SquareBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+            fillShape->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(0.25f, .25f, .25f)));
+            fillShape->updateModellingTransform(glm::translate(glm::mat4(1.0f), pos));
+            lineFill.push_back(fillShape);
+            renderer.addMesh(fillShape);
+        }
+        std::shared_ptr<std::vector<std::shared_ptr<Shape>>> spLineFill = std::make_shared<std::vector<std::shared_ptr<Shape>>>(lineFill);
+        for (auto point : controlPoints) {
+            point->setOnMouseDrag([spLineFill, &controlPoints](std::weak_ptr<Shape> theShape){
+                std::vector<glm::vec3> positions = computeBezierCurve(controlPoints);
+                for (int i = 0; i < positions.size(); ++i) {
+                    spLineFill->at(i)->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                    spLineFill->at(i)->updateModellingTransform(glm::translate(glm::mat4(1.0f), positions[i]));
+                }
+            });
+        }
+    }).withColour(glm::vec3(0.212,0.329,.369)).build());
     bool bHidden = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
         if (bHidden) {
@@ -823,11 +869,17 @@ void renderBasicSplineStudy(GLFWwindow* window) {
                 renderer.addMesh(controlPoint.locationSprite);
                 renderer.addMesh(controlPoint.rateOfChangeSprite);
             }
+            for (auto controlPoint : controlPoints) {
+                renderer.addMesh(controlPoint);
+            }
         }
         else {
             for (auto controlPoint : hermiteControlPoints) {
                 renderer.removeShape(controlPoint.locationSprite);
                 renderer.removeShape(controlPoint.rateOfChangeSprite);
+            }
+            for (auto point : controlPoints) {
+                renderer.removeShape(point);
             }
         }
         bHidden = !bHidden;
@@ -862,6 +914,8 @@ int main(int argc, const char * argv[]) {
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
+    const GLubyte* version = glGetString(GL_VERSION);
+    std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     
     renderBasicSplineStudy(window);
