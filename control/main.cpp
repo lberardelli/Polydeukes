@@ -751,7 +751,6 @@ void chipEightInterpreter(GLFWwindow* window) {
         std::cerr << "Failed to open the file." << std::endl;
         return;
     }
-
     char buffer[2];
     int i = 0;
     while (inputFile.read(buffer, 2)) {

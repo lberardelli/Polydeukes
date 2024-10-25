@@ -70,14 +70,97 @@ public:
                 pixel->setColour(glm::vec3(0.0f,0.0f,0.0f));
             }
         }
+        else if (instruction == 0x00EE) {
+            programCounter = stack.top();
+            stack.pop();
+        }
         else if ((instruction & 0xF000) == 0x1000) {
             programCounter = (instruction & 0xFFF);
+        }
+        else if ((instruction & 0xF000) == 0x2000) {
+            unsigned int memoryLocation = instruction & 0xFFF;
+            stack.push(programCounter);
+            programCounter = ram[memoryLocation];
+        }
+        else if ((instruction & 0xF000) == 0x3000) {
+            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+            if (registerValue == (instruction & 0xFF)) {
+                programCounter += 2;
+            }
+        }
+        else if ((instruction & 0xF000) == 0x4000) {
+            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+            if (registerValue != (instruction & 0xFF)) {
+                programCounter += 2;
+            }
+        }
+        else if ((instruction & 0xF000) == 0x5000) {
+            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+            unsigned int registerValue2 = registers[((instruction & 0xF0) >> 4)];
+            if (registerValue == registerValue2) {
+                programCounter += 2;
+            }
         }
         else if ((instruction & 0xF000) == 0x6000) {
             registers[(instruction & 0xF00) >> 8] = instruction & 0xFF;
         }
         else if ((instruction & 0xF000) == 0x7000) {
             registers[instruction & 0xF00] += (instruction & 0xFF);
+        }
+        else if ((instruction & 0xF000) == 0x8000) {
+            if ((instruction & 0xF) == 0) {
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+            }
+            else if ((instruction & 0xF) == 1) {
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] | registers[((instruction & 0xF0) >> 4)];
+            }
+            else if ((instruction & 0xF) == 2) {
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] & registers[((instruction & 0xF0) >> 4)];
+            }
+            else if ((instruction & 0xF) == 3) {
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] ^ registers[((instruction & 0xF0) >> 4)];
+            }
+            else if ((instruction & 0xF) == 4) {
+                registers[0xF] = 0;
+                unsigned int result = registers[((instruction & 0xF00) >> 8)] + registers[((instruction & 0xF0) >> 4)];
+                if (result > 255) {
+                    registers[0xF] = 1;
+                }
+                registers[((instruction & 0xF00) >> 8)] = result;
+            }
+            else if ((instruction & 0xF) == 5) {
+                registers[0xF] = 1;
+                int result = registers[((instruction & 0xF00) >> 8)] - registers[((instruction & 0xF0) >> 4)];
+                if (result >= 0) {
+                    registers[0xF] = 0;
+                }
+                registers[((instruction & 0xF00) >> 8)] = result;
+            }
+            else if ((instruction & 0xF) == 7) {
+                registers[0xF] = 1;
+                int result = -1 * (registers[((instruction & 0xF00) >> 8)] - registers[((instruction & 0xF0) >> 4)]);
+                if (result >= 0) {
+                    registers[0xF] = 0;
+                }
+                registers[((instruction & 0xF00) >> 8)] = result;
+            }
+            else if ((instruction & 0xF) == 6) {
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+                registers[0xF] = registers[((instruction & 0xF00) >> 8)] & 1;
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] >> 1;
+            }
+            else if ((instruction & 0xF) == 14) {
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+                registers[0xF] = ((registers[((instruction & 0xF00) >> 8)] & 0xF000) >> 15);
+                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] << 1;
+            }
+        }
+        else if ((instruction & 0xF000) == 0x9000) {
+            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+            unsigned int registerValue2 = registers[((instruction & 0xF0) >> 4)];
+            if (registerValue != registerValue2) {
+                programCounter += 2;
+            }
         }
         else if ((instruction & 0xF000) == 0xA000) {
             indexRegister = instruction & 0xFFF;
