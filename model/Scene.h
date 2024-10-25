@@ -248,7 +248,7 @@ public:
     SceneGraphNode(std::ifstream& sourceFileStream, std::string name, SceneGraphNode* parent = 0) : name(name), parent(parent) {
         std::string line{};
         data = SphereBuilder::getInstance()->build();
-        interGeometry = SphereBuilder::getInstance()->build();
+        interGeometry = CubeBuilder().build();
         while (std::getline(sourceFileStream, line)) {
             std::string delim = " ";
             std::string first = line.substr(0, line.find(delim));
@@ -365,7 +365,6 @@ public:
             interGeometry->render(program);
         }
         data->render(program);
-        std::cout << name << " " << glm::to_string(data->getPosition()) << std::endl;
         for (auto child : children) {
             child->render(program, accumulatedTranslation * glm::translate(glm::mat4(1.0f), localOffsets[frameNumber]) * rot, frameNumber);
         }

@@ -27,6 +27,95 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <stack>
+
+class Chip8Interpreter {
+    std::array<unsigned int, 4096> ram{};
+    unsigned int programCounter{};
+    unsigned int indexRegister{};
+    std::stack<unsigned int> stack{};
+    unsigned int soundTimer{};
+    unsigned int delayTimer{};
+    std::array<unsigned int, 16> registers{};
+    std::array<std::shared_ptr<Shape>, 2048>* display{};
+    
+public:
+    
+    Chip8Interpreter() {}
+    
+    Chip8Interpreter(std::array<unsigned int, 4096>& ram,
+                 unsigned int programCounter,
+                 unsigned int indexRegister,
+                 std::stack<unsigned int>& stack,
+                 unsigned int soundTimer,
+                 unsigned int delayTimer,
+                 std::array<unsigned int, 16>& registers,
+                 std::array<std::shared_ptr<Shape>, 2048>* display)
+            : ram(ram),
+              programCounter(programCounter),
+              indexRegister(indexRegister),
+              stack(stack),
+              soundTimer(soundTimer),
+              delayTimer(delayTimer),
+              registers(registers),
+              display(std::move(display))
+        {
+        }
+    
+    void fetchDecodeExecute() {
+        unsigned int instruction = (ram[programCounter] << 8) | ram[programCounter + 1];
+        programCounter += 2;
+        if (instruction == 0x00E0) {
+            for (auto pixel : *display) {
+                pixel->setColour(glm::vec3(0.0f,0.0f,0.0f));
+            }
+        }
+        else if ((instruction & 0xF000) == 0x1000) {
+            programCounter = (instruction & 0xFFF);
+        }
+        else if ((instruction & 0xF000) == 0x6000) {
+            registers[(instruction & 0xF00) >> 8] = instruction & 0xFF;
+        }
+        else if ((instruction & 0xF000) == 0x7000) {
+            registers[instruction & 0xF00] += (instruction & 0xFF);
+        }
+        else if ((instruction & 0xF000) == 0xA000) {
+            indexRegister = instruction & 0xFFF;
+        }
+        else if ((instruction & 0xF000) == 0xD000) {
+            unsigned int horizontalCoordinate = (registers[(instruction & 0xF00) >> 8] & 63);
+            unsigned int verticalCoordinate = registers[(instruction & 0xF0) >> 4] & 31;
+            unsigned int indexOfFirstPixel = verticalCoordinate * 64 + horizontalCoordinate;
+            unsigned int memoryLocation = indexRegister;
+            registers[0xF] = 0;
+            int height = (instruction & 0xF);
+            for (int k = 0; k < height; ++k) {
+                unsigned int sprite = ram[memoryLocation + k];
+                for (int i = 0; i < 8; ++i) {
+                    if ((sprite & 1) == 1) {
+                        if (horizontalCoordinate + 8 - i > 63) {
+                            continue;
+                        }
+                        auto pixel = (*display)[indexOfFirstPixel + 7 - i];
+                        if (pixel->getColour().x > 0.5) {
+                            registers[0xF] = 1;
+                            pixel->setColour(glm::vec3(0.f,0.f,0.f));
+                        }
+                        else {
+                            pixel->setColour(glm::vec3(1.0f,1.0f,1.0f));
+                        }
+                    }
+                    sprite >>= 1;
+                }
+                indexOfFirstPixel += 64;
+                if (verticalCoordinate + k + 1 > 31) {
+                    break;
+                }
+            }
+        }
+    }
+};
+
 
 class Renderer {
     
@@ -41,6 +130,8 @@ private:
     std::vector<Particle> particles{};
     glm::mat4 view;
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)screen_width / (float)screen_height, 0.1f, 1000.0f);
+    Chip8Interpreter interpreter{};
+    bool runChip8 = false;
     
     struct RenderPackage {
         std::shared_ptr<Shape> shape;
@@ -139,6 +230,11 @@ public:
         return glm::length(particle.getPosition()) > 50;
     }
     
+    void addChip8Interpreter(Chip8Interpreter&& interpreter) {
+        this->interpreter = interpreter;
+        runChip8 = true;
+    }
+    
     /*
      TODO: Need to couple the shading program and the object in the scene
      This is related to the rendering data package as in the shading program could be in the rendering package.
@@ -158,6 +254,9 @@ public:
         SphereBuilder::getInstance()->withPosition(glm::vec3(-10.0f,0.0f,0.0f)).withColour(glm::vec3(1.0f,1.0f,1.0f));
         auto start = std::chrono::high_resolution_clock::now();
         while (!glfwWindowShouldClose(window)) {
+            if (runChip8) {
+                interpreter.fetchDecodeExecute();
+            }
             if (i % 10 == 0) {
                 auto end = std::chrono::high_resolution_clock::now();
                 std::chrono::duration<double> duration = end - start;

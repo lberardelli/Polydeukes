@@ -45,11 +45,8 @@ public:
     void render(ShaderProgram shaderProgram) override {
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        Shape::renderAABB(getAABB(), shaderProgram);
     }
     
     std::shared_ptr<Shape> clone() override {

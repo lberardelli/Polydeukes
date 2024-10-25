@@ -51,7 +51,7 @@ public:
             glm::vec4(w, 0.0f),
             glm::vec4(t, 1.0f)
         );
-        glm::mat4 scaleTransform = homogeneousMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(deltaLength, 1.0/5.f, 1.0f/5.f));
+        glm::mat4 scaleTransform = homogeneousMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(deltaLength, 1.0, 1.0f));
         return glm::translate(glm::mat4(1.0f), (currentPosition - (glm::vec3(delta.x/2.f, delta.y/2.f, delta.z/2.0f)))) * scaleTransform;
     }
     

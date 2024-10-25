@@ -74,6 +74,8 @@ public:
     
     virtual void render(ShaderProgram shaderProgram) = 0;
     
+    //TODO: Optimize based on probably sharing the VAO reference or smarter aabb calculation
+    //Probably can just upload the aabb of a preloaded mesh as soon as it's instantiated. then just apply the modeling transform to it.
     void renderAABB(std::vector<glm::vec3> aabb, ShaderProgram program) {
         glm::mat4 ide = glm::mat4(1.0f);
         program.setMat4("model", ide);

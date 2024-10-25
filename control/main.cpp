@@ -28,6 +28,7 @@
 #include <gtc/matrix_transform.hpp>
 #include <gtc/type_ptr.hpp>
 #include <functional>
+#include <stack>
 
 /*
  TODO: need an undo button.
@@ -167,220 +168,12 @@ ShapeBuilder* KeyboardController::sphereBuilder{};
 ShapeBuilder* KeyboardController::cubeBuilder{};
 ShapeBuilder* KeyboardController::squareBuilder{};
 
-const char *vertexShaderSource = "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec3 aCol;\n"
-    "layout (location = 2) in vec2 aTex; \n"
-    "uniform mat4 transform;\n"
-    "out vec4 ourColour;\n"
-    "out vec4 ourPosition;\n"
-    "out vec2 TexCoord;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = transform * vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "   ourPosition = vec4(aPos, 1.0);\n"
-    "   ourColour = vec4(aCol,0.2);\n"
-    "   TexCoord = vec2(aTex.x, aTex.y);\n"
-    "}\0";
-
-const char *fragmentShaderSource = "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "in vec4 ourColour;\n"
-    "in vec4 ourPosition;\n"
-    "in vec2 TexCoord;\n"
-    "uniform sampler2D texture1;\n"
-    "uniform sampler2D texture2;\n"
-    "void main()\n"
-    "{\n"
-    "   vec2 scaledUpTexture = vec2(TexCoord.x * 4.0, TexCoord.y * 4.0);\n"
-    "   FragColor = mix(texture(texture1, TexCoord), texture(texture2, scaledUpTexture), 0.2) * ourColour;\n"
-    "}\n\0";
-
 
 void processInput(GLFWwindow *window)
 {
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
     
-}
-
-void textureExample(GLFWwindow* window, unsigned int shaderProgram) {
-    float vertices[] = {
-        // positions          // colors           // texture coords
-         0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   // top right
-         0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   // bottom right
-        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // bottom left
-        -0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f    // top left
-    };
-    
-    unsigned int texture = texture::generateTexture("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/assets/container.jpg");
-    unsigned int texture2 = texture::generateFaceTexture();
-    
-    unsigned int indices[] = {  // note that we start from 0!
-        0, 1, 3,   // first triangle
-        1, 2, 3    // second triangle
-    };
-    
-    unsigned int VAO,VBO,EBO;
-    
-    /*
-     what's a vertex array object? not sure, but binding it then doing operations on bound vertex buffers puts
-     the resulting operation on the bound vao.
-     */
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-    glBindVertexArray(VAO);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3*sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6*sizeof(float)));
-    glEnableVertexAttribArray(2);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    
-    //set the indices for the texture units.
-    glUseProgram(shaderProgram);
-    glUniform1i(glGetUniformLocation(shaderProgram, "texture1"), 0);
-    glUniform1i(glGetUniformLocation(shaderProgram, "texture2"), 1);
-    
-    while (!glfwWindowShouldClose(window)) {
-        processInput(window);
-        
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, texture2);
-        
-        glm::mat4 trans = glm::mat4(1.0f);
-        trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
-        trans = glm::rotate(trans, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, 1.0f));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "transform"), 1, GL_FALSE, glm::value_ptr(trans));
-        
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        
-        trans = glm::mat4(1.0f);
-        trans = glm::translate(trans, glm::vec3(-0.5f, 0.5f, 0.0f));
-        float time = glfwGetTime();
-        float scale = sin(time);
-        trans = glm::scale(trans, glm::vec3(scale, scale, scale));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "transform"), 1, GL_FALSE, glm::value_ptr(trans));
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-        
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-}
-
-void triangleExample(GLFWwindow* window, unsigned int shaderProgram) {
-    //vertices of triangle
-    float vertices[] = {
-        //position          //colour
-        0.5f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f,   // bottom right
-        -0.5f, -0.5f, 0.0f,  0.0f, 1.0f, 0.0f,   // bottom left
-        0.0f,  0.5f, 0.0f,  0.0f, 0.0f, 1.0f //top
-    };
-    
-    //set up vertex array and buffer objects
-    unsigned int VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-    
-    
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3*sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    
-    //render loop
-    while(!glfwWindowShouldClose(window))
-    {
-        processInput(window);
-        
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        
-        glUseProgram(shaderProgram);
-        int offsetLocation = glGetUniformLocation(shaderProgram, "offset");
-        glUniform1f(offsetLocation, 0.5);
-        
-//        float timeValue = glfwGetTime();
-//        float greenValue = (sin(timeValue) / 2.0f) + 0.5f;
-//        int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColour");
-//        glUniform4f(vertexColorLocation, 0.0f, greenValue, 0.0f, 1.0f);
-        
-
-        
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-}
-
-unsigned int buildShaderProgram(const char* vertexShaderSource, const char* fragmentShaderSource) {
-    //compile the vertex shader
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    int  success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if(!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    
-    //compile the fragment shader
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if(!success)
-    {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    
-    //linking the shader program
-    unsigned int shaderProgram;
-    shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if(!success) {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::LINK_FAILED\n" << infoLog << std::endl;
-    }
-    glDeleteShader(fragmentShader);
-    glDeleteShader(vertexShader);
-    return shaderProgram;
 }
 
 SceneList getFloor() {
@@ -627,7 +420,7 @@ std::vector<glm::vec3> computeBezierCurve(std::vector<std::shared_ptr<Shape>>& c
         currentCurve[2] = controlPoints[i+2];
         currentCurve[3] = controlPoints[i+3];
         float parameterValue = 0.f;
-        for (int j = 0; j < 101; ++j) {
+        for (int j = 0; j < GRANULARITY; ++j) {
             glm::vec3 firstInterpolatedValue = currentCurve[1]->getPosition()*(parameterValue) + currentCurve[0]->getPosition() * (1.f-parameterValue);
             glm::vec3 secondInterpolatedValue = currentCurve[2]->getPosition()*(parameterValue) + currentCurve[1]->getPosition() * (1.f-parameterValue);
             glm::vec3 thirdInterpolatedValue = currentCurve[3]->getPosition()*(parameterValue) + currentCurve[2]->getPosition() * (1.f-parameterValue);
@@ -635,7 +428,7 @@ std::vector<glm::vec3> computeBezierCurve(std::vector<std::shared_ptr<Shape>>& c
             glm::vec3 secondsecondIV = thirdInterpolatedValue*(parameterValue) + secondInterpolatedValue*(1.f-parameterValue);
             glm::vec3 thirdFirstIV = secondsecondIV * (parameterValue) + secondFirstIV * (1.f-parameterValue);
             positions.push_back(thirdFirstIV);
-            parameterValue += 0.01f;
+            parameterValue += (float)1.f/(float)GRANULARITY;
         }
     }
     return positions;
@@ -715,8 +508,6 @@ LocationIndexPairs updateHermiteSpline(std::vector<HermiteControlPoint>& control
 
 
 void renderBasicSplineStudy(GLFWwindow* window) {
-    //Need tooling to change the interpolation strategy.
-    //This tooling can engage certain "modes" required for the interpolation strategy e.g. points and tangents for hermite strategy.
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
@@ -729,8 +520,9 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
-        std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f))
-            .withPosition(position).build();
+        std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+        controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.5f,.5f,.5f)));
+        controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), position));
         controlPoints.push_back(controlPoint);
         controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
             MeshDragger::registerMousePositionCallback(window, targetShape);
@@ -890,6 +682,87 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+void chipEightInterpreter(GLFWwindow* window) {
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/chip8fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double x, double y){});
+    picker.enable(window);
+    
+    //define the 64x32 display
+    std::array<std::shared_ptr<Shape>, 2048> display{};
+    //hack based on hard coded fov and aspect ratio from the renderer
+    glm::vec3 center = glm::vec3(-25.37, 14.04, 0.f);
+    for (int i = 0; i < 32; ++i) {
+        for (int j = 0; j < 64; ++j) {
+            std::shared_ptr<Shape> tmp = SquareBuilder().withColour(glm::vec3(0.f,0.f,0.f)).withOnClickCallback([](std::weak_ptr<Shape> self){
+                self.lock()->setColour(glm::vec3(1.0f,1.0f,1.0f));
+            }).build();
+            tmp->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.805415260f,.906092f, 1.f)));
+            tmp->updateModellingTransform(glm::translate(glm::mat4(1.0f), center));
+            center = glm::vec3(center.x + .805415260f, center.y, center.z);
+            renderer.addMesh(tmp);
+            display[i*64+j] = tmp;
+        }
+        center = glm::vec3(-25.37, center.y - .906092f, 0.f);
+    }
+    
+    //define the memory
+    std::array<unsigned int, 4096> ram{};
+    //pc
+    unsigned int programCounter = 0x200;
+    //index register
+    unsigned int indexRegister{};
+    std::stack<unsigned int> stack{};
+    unsigned int soundTimer{};
+    unsigned int delayTimer{};
+    std::array<unsigned int, 16> registers{};
+    
+    //glyphs
+    const unsigned int digitBitmaps[16][5] = {
+        {0xF0, 0x90, 0x90, 0x90, 0xF0}, // 0
+        {0x20, 0x60, 0x20, 0x20, 0x70}, // 1
+        {0xF0, 0x10, 0xF0, 0x80, 0xF0}, // 2
+        {0xF0, 0x10, 0xF0, 0x10, 0xF0}, // 3
+        {0x90, 0x90, 0xF0, 0x10, 0x10}, // 4
+        {0xF0, 0x80, 0xF0, 0x10, 0xF0}, // 5
+        {0xF0, 0x80, 0xF0, 0x90, 0xF0}, // 6
+        {0xF0, 0x10, 0x20, 0x40, 0x40}, // 7
+        {0xF0, 0x90, 0xF0, 0x90, 0xF0}, // 8
+        {0xF0, 0x90, 0xF0, 0x10, 0xF0}, // 9
+        {0xF0, 0x90, 0xF0, 0x90, 0x90}, // A
+        {0xE0, 0x90, 0xE0, 0x90, 0xE0}, // B
+        {0xF0, 0x80, 0x80, 0x80, 0xF0}, // C
+        {0xE0, 0x90, 0x90, 0x90, 0xE0}, // D
+        {0xF0, 0x80, 0xF0, 0x80, 0xF0}, // E
+        {0xF0, 0x80, 0xF0, 0x80, 0x80}  // F
+    };
+    //load glyphs to ram
+    for (int i = 0; i < 16; ++i) {
+        for (int j = 0; j < 5; ++j) {
+            ram[i * 5 + j] = digitBitmaps[i][j];
+        }
+    }
+    //load game into ram
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/IBMLogo.ch8", std::ios::binary);
+    if (!inputFile) {
+        std::cerr << "Failed to open the file." << std::endl;
+        return;
+    }
+
+    char buffer[2];
+    int i = 0;
+    while (inputFile.read(buffer, 2)) {
+        ram[0x200 + i] = static_cast<unsigned char>(buffer[0]); // Assign first byte
+        ram[0x200 + i + 1] = static_cast<unsigned char>(buffer[1]); // Assign second byte
+        i += 2;
+    }
+    renderer.addChip8Interpreter(Chip8Interpreter(ram, programCounter, indexRegister, stack, soundTimer, delayTimer, registers, &display));
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
 
 /*
  TODO: Using MVC to define multiple viewing rectangles. Tinker with glViewport and google around to see examples.
@@ -918,7 +791,7 @@ int main(int argc, const char * argv[]) {
     std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     
-    renderBasicSplineStudy(window);
+    chipEightInterpreter(window);
 
     glfwTerminate();
     return 0;
