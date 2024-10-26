@@ -689,7 +689,6 @@ void chipEightInterpreter(GLFWwindow* window) {
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double x, double y){});
-    picker.enable(window);
     
     //define the 64x32 display
     std::array<std::shared_ptr<Shape>, 2048> display{};
@@ -716,8 +715,8 @@ void chipEightInterpreter(GLFWwindow* window) {
     //index register
     unsigned int indexRegister{};
     std::stack<unsigned int> stack{};
-    unsigned int soundTimer{};
-    unsigned int delayTimer{};
+    unsigned int soundTimer = 255;
+    unsigned int delayTimer = 255;
     std::array<unsigned int, 16> registers{};
     
     //glyphs
@@ -746,7 +745,7 @@ void chipEightInterpreter(GLFWwindow* window) {
         }
     }
     //load game into ram
-    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/IBMLogo.ch8", std::ios::binary);
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Trip8 Demo (2008) [Revival Studios].ch8", std::ios::binary);
     if (!inputFile) {
         std::cerr << "Failed to open the file." << std::endl;
         return;
@@ -756,9 +755,13 @@ void chipEightInterpreter(GLFWwindow* window) {
     while (inputFile.read(buffer, 2)) {
         ram[0x200 + i] = static_cast<unsigned char>(buffer[0]); // Assign first byte
         ram[0x200 + i + 1] = static_cast<unsigned char>(buffer[1]); // Assign second byte
+        std::cout << std::hex << ram[512+i] << " " << ram[513+i] << ", ";
         i += 2;
     }
-    renderer.addChip8Interpreter(Chip8Interpreter(ram, programCounter, indexRegister, stack, soundTimer, delayTimer, registers, &display));
+    Arcball arcball(&camera);
+    arcball.enable(window);
+    Chip8InputHandler handler(window);
+    renderer.addChip8Interpreter(Chip8Interpreter(ram, programCounter, indexRegister, stack, soundTimer, delayTimer, registers, &display, &handler));
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -789,7 +792,6 @@ int main(int argc, const char * argv[]) {
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    
     chipEightInterpreter(window);
 
     glfwTerminate();

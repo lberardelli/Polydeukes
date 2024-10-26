@@ -28,6 +28,47 @@
 #include <chrono>
 #include <thread>
 #include <stack>
+#include <random>
+
+class Chip8InputHandler {
+    static const int constexpr key_codes[16] = {
+        305, 306, 307, 308, 282, 336, 331, 332, 327, 328, 329, 333, 324, 325, 326, 334
+    };
+    
+    static bool is_key_pressed[16];
+    
+    static int isKeyOfInterest(int key) {
+        for (int i = 0; i < 16; ++i) {
+            if (key == key_codes[i]) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+        int key_code_index = isKeyOfInterest(key);
+        if (key_code_index >= 0) {
+            if (action == GLFW_PRESS) {
+                std::cout << "Key Pressed: " << key << std::endl;
+                is_key_pressed[key_code_index] = true;
+            } else if (action == GLFW_RELEASE) {
+                std::cout << "Key Released: " << key << std::endl;
+                is_key_pressed[key_code_index] = false;
+            }
+        }
+    }
+    
+public:
+    
+    explicit Chip8InputHandler(GLFWwindow* window) {
+        glfwSetKeyCallback(window, key_callback);
+    }
+    
+    bool isKeyPressed(int index) {
+        return is_key_pressed[index];
+    }
+};
 
 class Chip8Interpreter {
     std::array<unsigned int, 4096> ram{};
@@ -38,6 +79,7 @@ class Chip8Interpreter {
     unsigned int delayTimer{};
     std::array<unsigned int, 16> registers{};
     std::array<std::shared_ptr<Shape>, 2048>* display{};
+    Chip8InputHandler* inputHandler;
     
 public:
     
@@ -50,150 +92,235 @@ public:
                  unsigned int soundTimer,
                  unsigned int delayTimer,
                  std::array<unsigned int, 16>& registers,
-                 std::array<std::shared_ptr<Shape>, 2048>* display)
-            : ram(ram),
-              programCounter(programCounter),
-              indexRegister(indexRegister),
-              stack(stack),
-              soundTimer(soundTimer),
-              delayTimer(delayTimer),
-              registers(registers),
-              display(std::move(display))
+                 std::array<std::shared_ptr<Shape>, 2048>* display,
+                     Chip8InputHandler* handler)
+            :   ram(ram),
+                programCounter(programCounter),
+                indexRegister(indexRegister),
+                stack(stack),
+                soundTimer(soundTimer),
+                delayTimer(delayTimer),
+                registers(registers),
+                display(display), inputHandler(handler)
         {
         }
     
     void fetchDecodeExecute() {
-        unsigned int instruction = (ram[programCounter] << 8) | ram[programCounter + 1];
-        programCounter += 2;
-        if (instruction == 0x00E0) {
-            for (auto pixel : *display) {
-                pixel->setColour(glm::vec3(0.0f,0.0f,0.0f));
+        for (int i = 0; i < 10; ++i) {
+            unsigned int instruction = (ram[programCounter] << 8) | ram[programCounter + 1];
+            programCounter += 2;
+            if (instruction == 0x00E0) {
+                for (auto pixel : *display) {
+                    pixel->setColour(glm::vec3(0.0f,0.0f,0.0f));
+                }
             }
-        }
-        else if (instruction == 0x00EE) {
-            programCounter = stack.top();
-            stack.pop();
-        }
-        else if ((instruction & 0xF000) == 0x1000) {
-            programCounter = (instruction & 0xFFF);
-        }
-        else if ((instruction & 0xF000) == 0x2000) {
-            unsigned int memoryLocation = instruction & 0xFFF;
-            stack.push(programCounter);
-            programCounter = ram[memoryLocation];
-        }
-        else if ((instruction & 0xF000) == 0x3000) {
-            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
-            if (registerValue == (instruction & 0xFF)) {
-                programCounter += 2;
+            else if (instruction == 0x00EE) {
+                programCounter = stack.top();
+                stack.pop();
             }
-        }
-        else if ((instruction & 0xF000) == 0x4000) {
-            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
-            if (registerValue != (instruction & 0xFF)) {
-                programCounter += 2;
+            else if ((instruction & 0xF000) == 0x1000) {
+                programCounter = (instruction & 0xFFF);
             }
-        }
-        else if ((instruction & 0xF000) == 0x5000) {
-            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
-            unsigned int registerValue2 = registers[((instruction & 0xF0) >> 4)];
-            if (registerValue == registerValue2) {
-                programCounter += 2;
+            else if ((instruction & 0xF000) == 0x2000) {
+                unsigned int memoryLocation = instruction & 0xFFF;
+                stack.push(programCounter);
+                programCounter = memoryLocation;
             }
-        }
-        else if ((instruction & 0xF000) == 0x6000) {
-            registers[(instruction & 0xF00) >> 8] = instruction & 0xFF;
-        }
-        else if ((instruction & 0xF000) == 0x7000) {
-            registers[instruction & 0xF00] += (instruction & 0xFF);
-        }
-        else if ((instruction & 0xF000) == 0x8000) {
-            if ((instruction & 0xF) == 0) {
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+            else if ((instruction & 0xF000) == 0x3000) {
+                unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+                if (registerValue == (instruction & 0xFF)) {
+                    programCounter += 2;
+                }
             }
-            else if ((instruction & 0xF) == 1) {
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] | registers[((instruction & 0xF0) >> 4)];
+            else if ((instruction & 0xF000) == 0x4000) {
+                unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+                if (registerValue != (instruction & 0xFF)) {
+                    programCounter += 2;
+                }
             }
-            else if ((instruction & 0xF) == 2) {
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] & registers[((instruction & 0xF0) >> 4)];
+            else if ((instruction & 0xF000) == 0x5000) {
+                unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+                unsigned int registerValue2 = registers[((instruction & 0xF0) >> 4)];
+                if (registerValue == registerValue2) {
+                    programCounter += 2;
+                }
             }
-            else if ((instruction & 0xF) == 3) {
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] ^ registers[((instruction & 0xF0) >> 4)];
+            else if ((instruction & 0xF000) == 0x6000) {
+                registers[(instruction & 0xF00) >> 8] = instruction & 0xFF;
             }
-            else if ((instruction & 0xF) == 4) {
+            else if ((instruction & 0xF000) == 0x7000) {
+                registers[(instruction & 0xF00) >> 8] = (registers[(instruction & 0xF00) >> 8] + (instruction & 0xFF)) % 256;
+            }
+            else if ((instruction & 0xF000) == 0x8000) {
+                if ((instruction & 0xF) == 0) {
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+                }
+                else if ((instruction & 0xF) == 1) {
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] | registers[((instruction & 0xF0) >> 4)];
+                }
+                else if ((instruction & 0xF) == 2) {
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] & registers[((instruction & 0xF0) >> 4)];
+                }
+                else if ((instruction & 0xF) == 3) {
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] ^ registers[((instruction & 0xF0) >> 4)];
+                }
+                else if ((instruction & 0xF) == 4) {
+                    registers[0xF] = 0;
+                    unsigned int result = registers[((instruction & 0xF00) >> 8)] + registers[((instruction & 0xF0) >> 4)];
+                    if (result > 255) {
+                        registers[0xF] = 1;
+                    }
+                    registers[((instruction & 0xF00) >> 8)] = result % 256;
+                }
+                else if ((instruction & 0xF) == 5) {
+                    unsigned int x = (instruction & 0xF00) >> 8;
+                    unsigned int y = (instruction & 0xF0) >> 4;
+                    if (registers[x] >= registers[y]) {
+                        registers[0xF] = 1; // No borrow
+                        registers[x] = registers[x] - registers[y];
+                    } else {
+                        registers[0xF] = 0; // Borrow occurred
+                        registers[x] = (registers[x] - registers[y] + 256) % 256;
+                    }
+                }
+                else if ((instruction & 0xF) == 7) {
+                    unsigned int x = (instruction & 0xF00) >> 8;
+                    unsigned int y = (instruction & 0xF0) >> 4;
+                    if (registers[y] >= registers[x]) {
+                        registers[0xF] = 1; // No borrow
+                        registers[x] = registers[y] - registers[x];
+                    } else {
+                        registers[0xF] = 0; // Borrow occurred
+                        registers[x] = (registers[y] - registers[x] + 256) % 256;
+                    }
+                }
+                else if ((instruction & 0xF) == 6) {
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+                    registers[0xF] = registers[((instruction & 0xF00) >> 8)] & 1;
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] >> 1;
+                }
+                else if ((instruction & 0xF) == 14) {
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
+                    registers[0xF] = ((registers[((instruction & 0xF00) >> 8)] & 0xF000) >> 15);
+                    registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] << 1;
+                }
+            }
+            else if ((instruction & 0xF000) == 0x9000) {
+                unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
+                unsigned int registerValue2 = registers[((instruction & 0xF0) >> 4)];
+                if (registerValue != registerValue2) {
+                    programCounter += 2;
+                }
+            }
+            else if ((instruction & 0xF000) == 0xA000) {
+                indexRegister = instruction & 0xFFF;
+            }
+            else if ((instruction & 0xF000) == 0xB000) {
+                programCounter = (instruction & 0xFFF) + registers[0];
+            }
+            else if ((instruction & 0xF000) == 0xC000) {
+                std::random_device dev;
+                std::mt19937 rng(dev());
+                std::uniform_int_distribution<std::mt19937::result_type> dist(0,4294967295);
+                unsigned int number = dist(rng);
+                registers[((instruction & 0xF00) >> 8)] = ((instruction & 0xFF) & number);
+            }
+            else if ((instruction & 0xF000) == 0xD000) {
+                unsigned int horizontalCoordinate = (registers[(instruction & 0xF00) >> 8] & 63);
+                unsigned int verticalCoordinate = registers[(instruction & 0xF0) >> 4] & 31;
+                unsigned int indexOfFirstPixel = verticalCoordinate * 64 + horizontalCoordinate;
+                unsigned int memoryLocation = indexRegister;
                 registers[0xF] = 0;
-                unsigned int result = registers[((instruction & 0xF00) >> 8)] + registers[((instruction & 0xF0) >> 4)];
-                if (result > 255) {
-                    registers[0xF] = 1;
-                }
-                registers[((instruction & 0xF00) >> 8)] = result;
-            }
-            else if ((instruction & 0xF) == 5) {
-                registers[0xF] = 1;
-                int result = registers[((instruction & 0xF00) >> 8)] - registers[((instruction & 0xF0) >> 4)];
-                if (result >= 0) {
-                    registers[0xF] = 0;
-                }
-                registers[((instruction & 0xF00) >> 8)] = result;
-            }
-            else if ((instruction & 0xF) == 7) {
-                registers[0xF] = 1;
-                int result = -1 * (registers[((instruction & 0xF00) >> 8)] - registers[((instruction & 0xF0) >> 4)]);
-                if (result >= 0) {
-                    registers[0xF] = 0;
-                }
-                registers[((instruction & 0xF00) >> 8)] = result;
-            }
-            else if ((instruction & 0xF) == 6) {
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
-                registers[0xF] = registers[((instruction & 0xF00) >> 8)] & 1;
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] >> 1;
-            }
-            else if ((instruction & 0xF) == 14) {
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF0) >> 4)];
-                registers[0xF] = ((registers[((instruction & 0xF00) >> 8)] & 0xF000) >> 15);
-                registers[((instruction & 0xF00) >> 8)] = registers[((instruction & 0xF00) >> 8)] << 1;
-            }
-        }
-        else if ((instruction & 0xF000) == 0x9000) {
-            unsigned int registerValue = registers[((instruction & 0xF00) >> 8)];
-            unsigned int registerValue2 = registers[((instruction & 0xF0) >> 4)];
-            if (registerValue != registerValue2) {
-                programCounter += 2;
-            }
-        }
-        else if ((instruction & 0xF000) == 0xA000) {
-            indexRegister = instruction & 0xFFF;
-        }
-        else if ((instruction & 0xF000) == 0xD000) {
-            unsigned int horizontalCoordinate = (registers[(instruction & 0xF00) >> 8] & 63);
-            unsigned int verticalCoordinate = registers[(instruction & 0xF0) >> 4] & 31;
-            unsigned int indexOfFirstPixel = verticalCoordinate * 64 + horizontalCoordinate;
-            unsigned int memoryLocation = indexRegister;
-            registers[0xF] = 0;
-            int height = (instruction & 0xF);
-            for (int k = 0; k < height; ++k) {
-                unsigned int sprite = ram[memoryLocation + k];
-                for (int i = 0; i < 8; ++i) {
-                    if ((sprite & 1) == 1) {
-                        if (horizontalCoordinate + 8 - i > 63) {
-                            continue;
+                int height = (instruction & 0xF);
+                for (int k = 0; k < height; ++k) {
+                    unsigned int sprite = ram[memoryLocation + k];
+                    for (int i = 0; i < 8; ++i) {
+                        if ((sprite & 1) == 1) {
+                            if (horizontalCoordinate + 8 - i > 63) {
+                                continue;
+                            }
+                            auto pixel = (*display)[indexOfFirstPixel + 7 - i];
+                            if (pixel->getColour().x > 0.5) {
+                                registers[0xF] = 1;
+                                pixel->setColour(glm::vec3(0.f,0.f,0.f));
+                            }
+                            else {
+                                pixel->setColour(glm::vec3(1.0f,1.0f,1.0f));
+                            }
                         }
-                        auto pixel = (*display)[indexOfFirstPixel + 7 - i];
-                        if (pixel->getColour().x > 0.5) {
-                            registers[0xF] = 1;
-                            pixel->setColour(glm::vec3(0.f,0.f,0.f));
-                        }
-                        else {
-                            pixel->setColour(glm::vec3(1.0f,1.0f,1.0f));
+                        sprite >>= 1;
+                    }
+                    indexOfFirstPixel += 64;
+                    if (verticalCoordinate + k + 1 > 31) {
+                        break;
+                    }
+                }
+            }
+            else if ((instruction & 0xF000) == 0xE000) {
+                if ((instruction & 0xFF) == 0x9E) {
+                    int keyIndex = registers[((instruction & 0xF00) >> 8)];
+                    if (inputHandler->isKeyPressed(keyIndex)) {
+                        programCounter += 2;
+                    }
+                }
+                else if ((instruction & 0xFF) == 0xA1) {
+                    int keyIndex = registers[((instruction & 0xF00) >> 8)];
+                    if (!inputHandler->isKeyPressed(keyIndex)) {
+                        programCounter += 2;
+                    }
+                }
+            }
+            else if ((instruction & 0xF000) == 0xF000) {
+                if ((instruction & 0xFF) == 0x7) {
+                    registers[((instruction & 0xF00) >> 8)] = delayTimer;
+                }
+                else if ((instruction & 0xFF) == 0x15) {
+                    delayTimer = registers[((instruction & 0xF00) >> 8)];
+                }
+                else if ((instruction & 0xFF) == 0x18) {
+                    soundTimer = registers[((instruction & 0xF00) >> 8)];
+                }
+                else if ((instruction & 0xFF) == 0x1E) {
+                    indexRegister += registers[((instruction & 0xF00) >> 8)];
+                }
+                else if ((instruction & 0xFF) == 0x0A) {
+                    programCounter -= 2;
+                    for (int i = 0; i < 16; ++i) {
+                        if (inputHandler->isKeyPressed(i)) {
+                            registers[((instruction & 0xF00) >> 8)] = i;
+                            programCounter += 2;
+                            break;
                         }
                     }
-                    sprite >>= 1;
                 }
-                indexOfFirstPixel += 64;
-                if (verticalCoordinate + k + 1 > 31) {
-                    break;
+                else if ((instruction & 0xFF) == 0x29) {
+                    indexRegister = 5 * registers[((instruction & 0xF00) >> 8)];
                 }
+                else if ((instruction & 0xFF) == 0x33) {
+                    int value = registers[((instruction & 0xF00) >> 8)];
+                    ram[indexRegister] = value / 100;
+                    value %= 100;
+                    ram[indexRegister+1] = value / 10;
+                    ram[indexRegister+2] = value % 10;
+                }
+                else if ((instruction & 0xFF) == 0x55) {
+                    int index = ((instruction & 0xF00) >> 8);
+                    for (int i = 0; i <= index; ++i) {
+                        ram[indexRegister + i] = registers[i];
+                    }
+                }
+                else if ((instruction & 0xFF) == 0x65) {
+                    int index = ((instruction & 0xF00) >> 8);
+                    for (int i = 0; i <= index; ++i) {
+                        registers[i] = ram[indexRegister + i];
+                    }
+                }
+            }
+            if (delayTimer > 0) {
+                --delayTimer;
+            }
+            if (soundTimer > 0) {
+                --soundTimer;
             }
         }
     }
@@ -340,15 +467,6 @@ public:
             if (runChip8) {
                 interpreter.fetchDecodeExecute();
             }
-            if (i % 10 == 0) {
-                auto end = std::chrono::high_resolution_clock::now();
-                std::chrono::duration<double> duration = end - start;
-                framerate = (double)10.0/duration.count();
-                std::cout << "Framerate: " << framerate << " fps." << std::endl;
-                start = end;
-                i = 0;
-            }
-            ++i;
             glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             glEnable(GL_DEPTH_TEST);
@@ -390,7 +508,19 @@ public:
                 }
             }
             
-            
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> duration = end - start;
+            double frameTime = duration.count();
+            if (frameTime < (1.f/60.f)) {
+                std::chrono::duration<double> sleepTime((1.f/60.f) - frameTime);
+                std::this_thread::sleep_for(sleepTime);
+            }
+            if (i % 10 == 0) {
+                std::cout << "framerate: " << 1.f/frameTime << std::endl;
+                i = 0;
+            }
+            ++i;
+            start = std::chrono::high_resolution_clock::now();
             glfwSwapBuffers(window);
             glfwPollEvents();
         }
