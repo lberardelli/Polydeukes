@@ -107,11 +107,12 @@ class MousePicker {
     
 public:
     
-    MousePicker(Renderer* renderer, Camera* camera, Scene* theScene, std::function<void(double,double)> clickCustomization) {
+    MousePicker(Renderer* renderer, Camera* camera, Scene* theScene, std::function<void(double,double)> clickCustomization, std::function<void(double,double)> rightClickCustomization = [](double x, double y){}) {
         MousePicker::renderer = renderer;
         MousePicker::camera = camera;
         MousePicker::theScene = theScene;
         MousePicker::clickCustomization = clickCustomization;
+        MousePicker::rightClickCustomization = rightClickCustomization;
     }
     
     virtual void enable(GLFWwindow* window) {
@@ -148,6 +149,7 @@ private:
     static std::shared_ptr<Shape> targetShape;
     static std::shared_ptr<Shape> currentlySelectedShape;
     static std::function<void(double,double)> clickCustomization;
+    static std::function<void(double,double)> rightClickCustomization;
     
     static void computeWorldRay() {
         Ray mouseRay = computeMouseRay(mousePositionX, mousePositionY);
@@ -271,7 +273,7 @@ private:
                 targetShape->onRightClick();
             }
             else {
-                
+                rightClickCustomization(mousePositionX, mousePositionY);
             }
         }
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE) {

@@ -18,6 +18,7 @@ Scene* MousePicker::theScene{};
 std::shared_ptr<Shape> MousePicker::targetShape{};
 std::shared_ptr<Shape> MousePicker::currentlySelectedShape{};
 std::function<void(double,double)> MousePicker::clickCustomization{};
+std::function<void(double,double)> MousePicker::rightClickCustomization{};
 Camera* LineDrawer::camera;
 LineDrawer::LineData LineDrawer::lineData{};
 std::vector<std::weak_ptr<Shape>> MeshDragger::passengers{};
