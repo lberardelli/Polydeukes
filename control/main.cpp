@@ -685,8 +685,10 @@ void renderBasicSplineStudy(GLFWwindow* window) {
 }
 
 void renderGPUSplineStudy(GLFWwindow* window) {
-    ShaderProgram tesselationProgram;
-    tesselationProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinecurvetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziertes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinefs.glsl");
+    ShaderProgram splineCurveProgram;
+    splineCurveProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinecurvetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziertes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinefs.glsl");
+    ShaderProgram splineSurfaceProgram;
+    splineSurfaceProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinesurfacetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziersurfacetes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
@@ -702,7 +704,15 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         SplineShapeRelation(std::shared_ptr<Shape> spline, std::vector<std::shared_ptr<Shape>> controlPoints) : spline(spline), controlPoints(controlPoints){}
         SplineShapeRelation(){}
     };
+    struct SplineSurfaceRelation {
+        std::shared_ptr<Shape> splineSurface{};
+        std::vector<std::shared_ptr<Shape>> controlPoints{};
+        
+        SplineSurfaceRelation(std::shared_ptr<Shape> splineSurface, std::vector<std::shared_ptr<Shape>> controlPoints) : splineSurface(splineSurface), controlPoints(controlPoints){}
+        SplineSurfaceRelation(){}
+    };
     SplineShapeRelation splineContainer{};
+    SplineSurfaceRelation splineSurfaceContainer{};
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
@@ -714,24 +724,62 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
             MeshDragger::registerMousePositionCallback(window, targetShape);
         });
-        controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
-            if (splineContainer.spline) {
-                for (int i = 0; i < 4; ++i) {
-                    if (splineContainer.controlPoints[i].get() == targetShape.lock().get()) {
-                        std::dynamic_pointer_cast<Spline>(splineContainer.spline)->updateLocation(i, targetShape.lock()->getPosition());
-                    }
-                }
-            }
-        });
         renderer.addMesh(controlPoint);
     }, [&arcball, window](double x, double y) {
         arcball.registerRotationCallback(window, x, y);
     });
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
-        std::shared_ptr<Shape> spline = std::shared_ptr<Spline>(new Spline(controlPoints[0]->getPosition(), controlPoints[1]->getPosition(), controlPoints[2]->getPosition(), controlPoints[3]->getPosition()));
+        std::shared_ptr<Shape> spline = std::shared_ptr<SplineCurve>(new SplineCurve(controlPoints[0]->getPosition(), controlPoints[1]->getPosition(), controlPoints[2]->getPosition(), controlPoints[3]->getPosition()));
         splineContainer = SplineShapeRelation(spline, controlPoints);
-        renderer.addMesh(spline, &tesselationProgram);
+        for (auto controlPoint : controlPoints) {
+            controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
+                if (splineContainer.spline) {
+                    for (int i = 0; i < 4; ++i) {
+                        if (splineContainer.controlPoints[i].get() == targetShape.lock().get()) {
+                            std::dynamic_pointer_cast<SplineCurve>(splineContainer.spline)->updateLocation(i, targetShape.lock()->getPosition());
+                        }
+                    }
+                }
+            });
+        }
+        renderer.addMesh(spline, &splineCurveProgram);
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
+    
+    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+        splineSurfaceContainer.controlPoints = controlPoints;
+        std::vector<glm::vec3> locations{};
+        for (auto shape : controlPoints) {
+            locations.push_back(shape->getPosition());
+        }
+        std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
+        splineSurfaceContainer.splineSurface = splineSurface;
+        for (auto controlPoint : controlPoints) {
+            controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
+                if (splineSurfaceContainer.splineSurface) {
+                    for (int i = 0; i < 16; ++i) {
+                        if (splineSurfaceContainer.controlPoints[i].get() == targetShape.lock().get()) {
+                            std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splineSurface)->updateLocation(i, targetShape.lock()->getPosition());
+                        }
+                    }
+                }
+            });
+        }
+        renderer.addMesh(splineSurface, &splineSurfaceProgram);
+    }).withColour(glm::vec3(0.212,0.329,.369)).build());
+    bool bHidden = false;
+    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+        if (bHidden) {
+            for (auto controlPoint : controlPoints) {
+                renderer.addMesh(controlPoint);
+            }
+        }
+        else {
+            for (auto point : controlPoints) {
+                renderer.removeShape(point);
+            }
+        }
+        bHidden = !bHidden;
+    }).build());
     picker.enable(window);
     MeshDragger::camera = &camera;
     renderer.buildandrender(window, &camera, &theScene);
