@@ -103,10 +103,14 @@ public:
     virtual void render(ShaderProgram shaderProgram) {
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
-        shaderProgram.setInt("TessLevel", 30);
+        shaderProgram.setInt("TessLevel", 16);
         glBindVertexArray(VAO);
         glPatchParameteri(GL_PATCH_VERTICES, 16);
         glDrawArrays(GL_PATCHES, 0, 16);
+        shaderProgram.setVec3("aColour", glm::vec3(0.0, 0.0, 0.0));
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawArrays(GL_PATCHES, 0, 16);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     
     void updateLocation(int i, glm::vec3 newPosition) {

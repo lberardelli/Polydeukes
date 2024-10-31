@@ -23,6 +23,15 @@ void basisFunctions(out float[4] b, out float[4] db, float t)
     db[3] = 3.0 * t * t;
 }
 
+vec3 decasteljau(float parameterValue, vec3 p0, vec3 p1, vec3 p2, vec3 p3) {
+    vec3 firstInterpolatedValue = p1*parameterValue + p0 * (1.f-parameterValue);
+    vec3 secondInterpolatedValue = p2*parameterValue + p1 * (1.f-parameterValue);
+    vec3 thirdInterpolatedValue = p3*parameterValue + p2 * (1.f-parameterValue);
+    vec3 secondFirstIV = secondInterpolatedValue*(parameterValue) + firstInterpolatedValue*(1.f-parameterValue);
+    vec3 secondsecondIV = thirdInterpolatedValue*(parameterValue) + secondInterpolatedValue*(1.f-parameterValue);
+    return secondsecondIV * (parameterValue) + secondFirstIV * (1.f-parameterValue);
+}
+
 void main()
 {
     float u = gl_TessCoord.x;
@@ -50,15 +59,11 @@ void main()
     basisFunctions(bu, dbu, u);
     basisFunctions(bv, dbv, v);
     // Bezier interpolation
-    FragPosition =
-    p00*bu[0]*bv[0] + p01*bu[0]*bv[1] + p02*bu[0]*bv[2] +
-    p03*bu[0]*bv[3] +
-    p10*bu[1]*bv[0] + p11*bu[1]*bv[1] + p12*bu[1]*bv[2] +
-    p13*bu[1]*bv[3] +
-    p20*bu[2]*bv[0] + p21*bu[2]*bv[1] + p22*bu[2]*bv[2] +
-    p23*bu[2]*bv[3] +
-    p30*bu[3]*bv[0] + p31*bu[3]*bv[1] + p32*bu[3]*bv[2] +
-    p33*bu[3]*bv[3];
+    vec3 i1 = decasteljau(u,p00.xyz,p01.xyz,p02.xyz,p03.xyz);
+    vec3 i2 = decasteljau(u,p10.xyz,p11.xyz,p12.xyz,p13.xyz);
+    vec3 i3 = decasteljau(u,p20.xyz,p21.xyz,p22.xyz,p23.xyz);
+    vec3 i4 = decasteljau(u,p30.xyz,p31.xyz,p32.xyz,p33.xyz);
+    FragPosition = vec4(decasteljau(v, i1,i2,i3,i4), 1.0);
     // The partial derivatives
     vec4 du =
     p00*dbu[0]*bv[0] + p01*dbu[0]*bv[1] + p02*dbu[0]*bv[2] +

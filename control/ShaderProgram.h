@@ -109,6 +109,41 @@ public:
         pid = shaderProgram;
     }
     
+    void createShaderProgram(const char* vertexPath, const char* tessControlPath,
+                               const char* tessEvalPath, const char* fragmentPath, const char* geometryPath) {
+        GLuint vertexShader = loadShader(vertexPath, GL_VERTEX_SHADER);
+        GLuint tessControlShader = loadShader(tessControlPath, GL_TESS_CONTROL_SHADER);
+        GLuint tessEvalShader = loadShader(tessEvalPath, GL_TESS_EVALUATION_SHADER);
+        GLuint fragmentShader = loadShader(fragmentPath, GL_FRAGMENT_SHADER);
+        GLuint geometryShader = loadShader(geometryPath, GL_GEOMETRY_SHADER);
+
+        GLuint shaderProgram = glCreateProgram();
+        glAttachShader(shaderProgram, vertexShader);
+        glAttachShader(shaderProgram, tessControlShader);
+        glAttachShader(shaderProgram, tessEvalShader);
+        glAttachShader(shaderProgram, fragmentShader);
+        glAttachShader(shaderProgram, geometryShader);
+
+        glLinkProgram(shaderProgram);
+
+        GLint success;
+        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+        if (!success) {
+            char infoLog[512];
+            glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
+            std::cerr << "Program linking failed:\n" << infoLog << std::endl;
+            return;
+        }
+
+        glDeleteShader(vertexShader);
+        glDeleteShader(tessControlShader);
+        glDeleteShader(tessEvalShader);
+        glDeleteShader(fragmentShader);
+        glDeleteShader(geometryShader);
+
+        pid = shaderProgram;
+    }
+    
     void init() {
         //compile the vertex shader
         unsigned int vertexShader;
