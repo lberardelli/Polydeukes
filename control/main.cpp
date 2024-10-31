@@ -23,6 +23,7 @@
 #include "../model/sphere.h"
 #include "../model/particle.h"
 #include "../model/axies.h"
+#include "../model/spline.h"
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -506,7 +507,6 @@ LocationIndexPairs updateHermiteSpline(std::vector<HermiteControlPoint>& control
     return pairs;
 }
 
-
 void renderBasicSplineStudy(GLFWwindow* window) {
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
@@ -514,12 +514,11 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     Arcball arcball(&camera);
-    
-    Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
     std::vector<std::shared_ptr<Shape>> controlPoints{};
     std::vector<HermiteControlPoint> hermiteControlPoints{};
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
+        Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
         std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
         controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.5f,.5f,.5f)));
@@ -682,6 +681,59 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     picker.enable(window);
     MeshDragger::camera = &camera;
     LineDrawer::camera = &camera;
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void renderGPUSplineStudy(GLFWwindow* window) {
+    ShaderProgram tesselationProgram;
+    tesselationProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinecurvetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziertes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinefs.glsl");
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    Arcball arcball(&camera);
+    std::vector<std::shared_ptr<Shape>> controlPoints{};
+    std::vector<HermiteControlPoint> hermiteControlPoints{};
+    struct SplineShapeRelation {
+        std::shared_ptr<Shape> spline{};
+        std::vector<std::shared_ptr<Shape>> controlPoints{};
+        
+        SplineShapeRelation(std::shared_ptr<Shape> spline, std::vector<std::shared_ptr<Shape>> controlPoints) : spline(spline), controlPoints(controlPoints){}
+        SplineShapeRelation(){}
+    };
+    SplineShapeRelation splineContainer{};
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
+        Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
+        Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
+        glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
+        std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+        controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.5f,.5f,.5f)));
+        controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), position));
+        controlPoints.push_back(controlPoint);
+        controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
+            MeshDragger::registerMousePositionCallback(window, targetShape);
+        });
+        controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
+            if (splineContainer.spline) {
+                for (int i = 0; i < 4; ++i) {
+                    if (splineContainer.controlPoints[i].get() == targetShape.lock().get()) {
+                        std::dynamic_pointer_cast<Spline>(splineContainer.spline)->updateLocation(i, targetShape.lock()->getPosition());
+                    }
+                }
+            }
+        });
+        renderer.addMesh(controlPoint);
+    }, [&arcball, window](double x, double y) {
+        arcball.registerRotationCallback(window, x, y);
+    });
+    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+        std::shared_ptr<Shape> spline = std::shared_ptr<Spline>(new Spline(controlPoints[0]->getPosition(), controlPoints[1]->getPosition(), controlPoints[2]->getPosition(), controlPoints[3]->getPosition()));
+        splineContainer = SplineShapeRelation(spline, controlPoints);
+        renderer.addMesh(spline, &tesselationProgram);
+    }).withColour(glm::vec3(0.212,0.329,.369)).build());
+    picker.enable(window);
+    MeshDragger::camera = &camera;
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -1077,8 +1129,8 @@ void chipEightInterpreter(GLFWwindow* window) {
  */
 int main(int argc, const char * argv[]) {
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     
@@ -1098,7 +1150,7 @@ int main(int argc, const char * argv[]) {
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    renderBasicSplineStudy(window);
+    renderGPUSplineStudy(window);
 
     glfwTerminate();
     return 0;

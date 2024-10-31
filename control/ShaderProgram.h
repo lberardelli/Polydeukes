@@ -11,6 +11,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -46,6 +47,67 @@ private:
 public:
     
     ShaderProgram(std::string vertexShaderName, std::string fragmentShaderName) : vertexShaderName{vertexShaderName}, fragmentShaderName{fragmentShaderName} {}
+    
+    ShaderProgram(){}
+    
+    GLuint loadShader(const char* shaderPath, GLenum shaderType) {
+        std::ifstream shaderFile(shaderPath);
+        if (!shaderFile) {
+            std::cerr << "Failed to open shader file: " << shaderPath << std::endl;
+            return 0;
+        }
+        std::stringstream shaderStream{};
+        shaderStream << shaderFile.rdbuf();
+        std::string shaderCode = shaderStream.str();
+        const char* shaderSource = shaderCode.c_str();
+
+        GLuint shader = glCreateShader(shaderType);
+        glShaderSource(shader, 1, &shaderSource, nullptr);
+        glCompileShader(shader);
+
+        GLint success;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            char infoLog[512];
+            glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+            std::cerr << "Shader compilation failed:\n" << infoLog << std::endl;
+            return 0;
+        }
+
+        return shader;
+    }
+    
+    void createShaderProgram(const char* vertexPath, const char* tessControlPath,
+                               const char* tessEvalPath, const char* fragmentPath) {
+        GLuint vertexShader = loadShader(vertexPath, GL_VERTEX_SHADER);
+        GLuint tessControlShader = loadShader(tessControlPath, GL_TESS_CONTROL_SHADER);
+        GLuint tessEvalShader = loadShader(tessEvalPath, GL_TESS_EVALUATION_SHADER);
+        GLuint fragmentShader = loadShader(fragmentPath, GL_FRAGMENT_SHADER);
+
+        GLuint shaderProgram = glCreateProgram();
+        glAttachShader(shaderProgram, vertexShader);
+        glAttachShader(shaderProgram, tessControlShader);
+        glAttachShader(shaderProgram, tessEvalShader);
+        glAttachShader(shaderProgram, fragmentShader);
+
+        glLinkProgram(shaderProgram);
+
+        GLint success;
+        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+        if (!success) {
+            char infoLog[512];
+            glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
+            std::cerr << "Program linking failed:\n" << infoLog << std::endl;
+            return;
+        }
+
+        glDeleteShader(vertexShader);
+        glDeleteShader(tessControlShader);
+        glDeleteShader(tessEvalShader);
+        glDeleteShader(fragmentShader);
+
+        pid = shaderProgram;
+    }
     
     void init() {
         //compile the vertex shader
