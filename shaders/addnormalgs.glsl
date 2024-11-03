@@ -1,33 +1,46 @@
 #version 410 core
 
-layout(triangles) in;
-layout(line_strip, max_vertices = 6) out;
+layout(triangles) in;                  // Receive points from the tessellation evaluation shader
+layout(triangle_strip, max_vertices = 4) out;
 
-in vec4 gsPosition[];    // Position from TES
-in vec3 gsNormal[];      // Normal from TES
+in vec4 gsPosition[];
+in vec4 gsNormal[];
 
-out vec4 FragNormal;     // Pass to FS
-out vec4 FragPosition;   // Pass to FS
-
-uniform mat4 view;
-uniform mat4 projection;
-uniform float normalLength = 0.1;
+out vec4 FragPosition;
+out vec4 FragNormal;
 
 void main() {
-    for (int i = 0; i < 3; ++i) {
-        // Pass along position and normal to fragment shader
-        FragPosition = gsPosition[i];
-        FragNormal = vec4(gsNormal[i], 0.0);
+    // First triangle from the quad
+    FragPosition = gsPosition[0]; // Bottom left
+    FragNormal = gsNormal[0];
+    gl_Position = gsPosition[0];
+    EmitVertex();
 
-        // Emit original vertex position
-        gl_Position = projection * view * gsPosition[i];
-        EmitVertex();
+    FragPosition = gsPosition[1]; // Bottom right
+    FragNormal = gsNormal[1];
+    gl_Position = gsPosition[1];
+    EmitVertex();
 
-        // Emit end of the normal line
-        vec3 endPoint = gsPosition[i].xyz + gsNormal[i] * normalLength;
-        gl_Position = projection * view * vec4(endPoint, 1.0);
-        EmitVertex();
+    FragPosition = gsPosition[2]; // Top left
+    FragNormal = gsNormal[2];
+    gl_Position = gsPosition[2];
+    EmitVertex();
+    EndPrimitive();
 
-        EndPrimitive();
-    }
+    // Second triangle from the quad
+    FragPosition = gsPosition[2]; // Top left
+    FragNormal = gsNormal[2];
+    gl_Position = gsPosition[2];
+    EmitVertex();
+
+    FragPosition = gsPosition[1]; // Bottom right
+    FragNormal = gsNormal[1];
+    gl_Position = gsPosition[1];
+    EmitVertex();
+
+    FragPosition = gsPosition[3]; // Top right
+    FragNormal = gsNormal[3];
+    gl_Position = gsPosition[3];
+    EmitVertex();
+    EndPrimitive();
 }

@@ -43,8 +43,9 @@ private:
     Scene* theScene;
     std::vector<Particle> particles{};
     glm::mat4 view;
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)screen_width / (float)screen_height, 0.1f, 1000.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)screen_width / (float)screen_height, 0.1f, 1000.0f);
     std::function<void()> preRenderCustomization = [] {};
+    static float fov;
     
     struct RenderPackage {
         std::shared_ptr<Shape> shape;

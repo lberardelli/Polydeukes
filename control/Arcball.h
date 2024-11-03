@@ -65,6 +65,10 @@ private:
         }
     }
     
+    static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+        cam->zoomIn(yoffset);
+    }
+    
     static void null_position_callback(GLFWwindow* window, double xpos, double ypos)
     {
         lastMouseX = xpos;

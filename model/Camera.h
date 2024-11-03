@@ -18,18 +18,13 @@ class Camera {
 private:
     
     glm::vec3 position;
+    glm::vec3 lookatPoint;
     glm::vec3 z_axis,x_axis,y_axis;
     glm::mat4 view;
     glm::mat4 canonicalTransform;
     glm::mat4 arcballTransform = glm::mat4(1.0f);
     
-public:
-  
-    glm::mat4 viewingTransformation() const {
-        return view;
-    }
-    
-    Camera(glm::vec3 position, glm::vec3 lookatPoint) : position(position) {
+    void setupViewingTransform() {
         //lookat basis
         z_axis = glm::normalize(position - lookatPoint);
         x_axis = glm::normalize(glm::cross(glm::vec3(0.0f,1.0f,0.0f), z_axis));
@@ -40,6 +35,22 @@ public:
         double m[16] = {x_axis[0],x_axis[1],x_axis[2],0,y_axis[0],y_axis[1],y_axis[2],0,z_axis[0],z_axis[1],z_axis[2],0,position[0],position[1],position[2],1};
         canonicalTransform = glm::make_mat4(m);
         view = glm::inverse(canonicalTransform);
+    }
+    
+    void updatePosition(glm::vec3 position) {
+        this->position = position;
+        setupViewingTransform();
+        view = glm::inverse(canonicalTransform) * arcballTransform;
+    }
+    
+public:
+  
+    glm::mat4 viewingTransformation() const {
+        return view;
+    }
+    
+    Camera(glm::vec3 position, glm::vec3 lookatPoint) : position(position), lookatPoint(lookatPoint) {
+        setupViewingTransform();
     }
     
     void updateViewingTransformation(glm::mat4&& transform) {
@@ -62,6 +73,11 @@ public:
     
     glm::mat4 arcballTransformation() {
         return arcballTransform;
+    }
+    
+    void zoomIn(float yoffset) {
+        position += glm::normalize(getDirection()) * yoffset * .1f;
+        updatePosition(position);
     }
 
 };
