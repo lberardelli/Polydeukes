@@ -11,6 +11,7 @@
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 #include <gtc/type_ptr.hpp>
+#include <GLFW/glfw3.h>
 #include <cmath>
 
 class Camera {
@@ -43,10 +44,71 @@ private:
         view = glm::inverse(canonicalTransform) * arcballTransform;
     }
     
+    void onLeftArrowPress(GLFWwindow* window) {
+        updatePosition(glm::vec3(position.x - .5f, position.y, position.z));
+    }
+    
+    void onRightArrowPress(GLFWwindow* window) {
+        updatePosition(glm::vec3(position.x + .5f, position.y, position.z));
+    }
+    
+    void onUpArrowPress(GLFWwindow* window) {
+        updatePosition(glm::vec3(position.x, position.y, position.z+.5f));
+    }
+    
+    void onDownArrowPress(GLFWwindow* window){
+        updatePosition(glm::vec3(position.x, position.y, position.z-.5f));
+    }
+    
+    void onWPress(GLFWwindow* window){
+        updatePosition(glm::vec3(position.x, position.y+.5, position.z));
+    }
+    
+    void onSPress(GLFWwindow* window){
+        updatePosition(glm::vec3(position.x, position.y-.5f, position.z));
+    }
+    
+    
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+        Camera* camera = static_cast<Camera*>(glfwGetWindowUserPointer(window));
+            if (camera) {
+                if (action == GLFW_PRESS) {
+                    switch (key) {
+                        case GLFW_KEY_LEFT:
+                            camera->onLeftArrowPress(window);
+                            break;
+                        case GLFW_KEY_RIGHT:
+                            camera->onRightArrowPress(window);
+                            break;
+                        case GLFW_KEY_UP:
+                            camera->onUpArrowPress(window);
+                            break;
+                        case GLFW_KEY_DOWN:
+                            camera->onDownArrowPress(window);
+                            break;
+                        case GLFW_KEY_W:
+                            camera->onWPress(window);
+                            break;
+                        case GLFW_KEY_S:
+                            camera->onSPress(window);
+                            break;
+                        default:
+                            break;
+                    }
+            }
+        }
+    }
+
+    
 public:
   
     glm::mat4 viewingTransformation() const {
         return view;
+    }
+    
+    void enableFreeCameraMovement(GLFWwindow* window) {
+        glfwSetWindowUserPointer(window, this);
+        glfwSetKeyCallback(window, keyCallback);
     }
     
     Camera(glm::vec3 position, glm::vec3 lookatPoint) : position(position), lookatPoint(lookatPoint) {

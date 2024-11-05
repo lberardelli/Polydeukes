@@ -107,10 +107,10 @@ public:
         glBindVertexArray(VAO);
         glPatchParameteri(GL_PATCH_VERTICES, 16);
         glDrawArrays(GL_PATCHES, 0, 16);
-        shaderProgram.setVec3("aColour", glm::vec3(0.0, 0.0, 0.0));
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glDrawArrays(GL_PATCHES, 0, 16);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+//        shaderProgram.setVec3("aColour", glm::vec3(0.0, 0.0, 0.0));
+//        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+//        glDrawArrays(GL_PATCHES, 0, 16);
+//        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     
     void updateLocation(int i, glm::vec3 newPosition) {
@@ -120,6 +120,36 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     }
+};
+
+class SplineSurfaceBundle : public Shape {
+private:
+    std::vector<std::shared_ptr<Shape>> surfaces{};
+public:
+    explicit SplineSurfaceBundle(std::vector<std::shared_ptr<Shape>> surfaces) : surfaces(surfaces) {}
+    
+    virtual std::shared_ptr<Shape> clone() {
+        return std::shared_ptr<SplineSurfaceBundle>(new SplineSurfaceBundle(surfaces));
+    }
+    
+    virtual void render(ShaderProgram shaderProgram) {
+        for (auto& surface : surfaces) {
+            surface->render(shaderProgram);
+        }
+    }
+    
+    virtual void updateModelingTransform(glm::mat4&& transform) {
+        for (auto surface : surfaces) {
+            surface->updateModellingTransform(std::move(transform));
+        }
+    }
+    
+    virtual void setModelingTransform(glm::mat4&& transform) {
+        for (auto surface : surfaces) {
+            surface->setModelingTransform(std::move(transform));
+        }
+    }
+    
 };
 
 #endif /* spline_h */
