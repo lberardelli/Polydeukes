@@ -1,8 +1,8 @@
 #version 410 core
 
 layout( quads ) in;
-out vec4 FragNormal; // Vertex normal in camera coords.
-out vec4 FragPosition; // Vertex position in camera coords
+out vec4 gsNormal; // Vertex normal in camera coords.
+out vec4 gsPosition; // Vertex position in camera coords
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
@@ -63,7 +63,7 @@ void main()
     vec3 i2 = decasteljau(u,p10.xyz,p11.xyz,p12.xyz,p13.xyz);
     vec3 i3 = decasteljau(u,p20.xyz,p21.xyz,p22.xyz,p23.xyz);
     vec3 i4 = decasteljau(u,p30.xyz,p31.xyz,p32.xyz,p33.xyz);
-    FragPosition = p00*bu[0]*bv[0] + p01*bu[0]*bv[1] + p02*bu[0]*bv[2] +
+    gsPosition = p00*bu[0]*bv[0] + p01*bu[0]*bv[1] + p02*bu[0]*bv[2] +
     p03*bu[0]*bv[3] +
     p10*bu[1]*bv[0] + p11*bu[1]*bv[1] + p12*bu[1]*bv[2] +
     p13*bu[1]*bv[3] +
@@ -91,10 +91,10 @@ void main()
     p30*bu[3]*dbv[0] + p31*bu[3]*dbv[1] + p32*bu[3]*dbv[2] +
     p33*bu[3]*dbv[3];
     // The normal vector is the cross product of the partials
-    vec3 n = normalize( cross(dv.xyz, du.xyz) );
+    vec3 n = normalize(cross(dv.xyz, du.xyz));
     // Transform to clip coordinates
-    gl_Position = projection * view * model * FragPosition;
+    gl_Position = view * model * gsPosition;
     // Convert to camera coordinates
-    FragPosition = view * model * FragPosition;
-    FragNormal = normalize(inverse(transpose(model)) * vec4(n, 0.0));
+    gsPosition = model * gsPosition;
+    gsNormal = normalize((transpose(inverse(model)) * vec4(n, 0.0)));
 }

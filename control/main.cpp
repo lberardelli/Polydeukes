@@ -688,10 +688,14 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     ShaderProgram splineCurveProgram;
     splineCurveProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinecurvetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziertes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinefs.glsl");
     ShaderProgram splineSurfaceProgram;
-    splineSurfaceProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinesurfacetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziersurfacetes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    splineSurfaceProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinesurfacetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziersurfacetes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl",
+         "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughgs.glsl");
+    ShaderProgram splineSurfaceNormalProgram;
+    splineSurfaceNormalProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinesurfacetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziersurfacetes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/lightsourceshader.glsl",
+         "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/addnormalgs.glsl");
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
-    Camera camera(glm::vec3(0.0f,1.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
     camera.enableFreeCameraMovement(window);
     Scene theScene{};
     Renderer renderer(&theScene,&program);
@@ -767,6 +771,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             });
         }
         renderer.addMesh(splineSurface, &splineSurfaceProgram);
+        renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
     bool bAlreadyClicked = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
@@ -815,6 +820,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         bAlreadyClicked = true;
         std::shared_ptr<Shape> bundle = std::shared_ptr<SplineSurfaceBundle>(new SplineSurfaceBundle(splineSurfaceContainer.splines));
         renderer.addMesh(bundle, &splineSurfaceProgram);
+        //renderer.addMesh(bundle->clone(), &splineSurfaceNormalProgram);
         for (auto controlPoint : controlPoints) {
             renderer.addMesh(controlPoint);
             controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
@@ -827,13 +833,13 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                 }
             });
         }
-        renderer.addPreRenderCustomization([bundle, &controlPoints]() {
-            double time = glfwGetTime();
-            float amplitude = 10.f;     // Half-width of the oscillation
-            float frequency = .25f;     // Cycles per second (Hz)
-            float x = amplitude * std::sin(2.0f * M_PI * frequency * time);
-            bundle->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.f,x)));
-        });
+//        renderer.addPreRenderCustomization([bundle, &controlPoints]() {
+//            double time = glfwGetTime();
+//            float amplitude = 10.f;     // Half-width of the oscillation
+//            float frequency = .25f;     // Cycles per second (Hz)
+//            float x = 2.0f * M_PI * frequency * time;
+//            bundle->setModelingTransform(glm::rotate(glm::mat4(1.0f), x, glm::vec3(0, 0.f,1)));
+//        });
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
     bool bHidden = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {

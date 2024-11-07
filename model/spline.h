@@ -57,7 +57,7 @@ public:
     virtual void render(ShaderProgram shaderProgram) {
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("LineColour", glm::vec3(0.749,0.749,0.));
-        shaderProgram.setInt("NumSegments", 1);
+        shaderProgram.setInt("NumSegments", 16);
         shaderProgram.setInt("NumStrips", 100);
         glBindVertexArray(VAO);
         glPatchParameteri(GL_PATCH_VERTICES, 4);

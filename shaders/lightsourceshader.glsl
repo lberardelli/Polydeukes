@@ -9,5 +9,5 @@ uniform vec3 eye;
 uniform vec3 lightColour;
 uniform sampler2D texture1;
 void main() {
-    FragColor = vec4(aColour.x, aColour.y, aColour.z, 1.0);
+    FragColor = vec4(1.0, 1.0, 1.0, .1);
 }
