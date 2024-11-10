@@ -103,7 +103,7 @@ public:
     virtual void render(ShaderProgram shaderProgram) {
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
-        shaderProgram.setInt("TessLevel", 16);
+        shaderProgram.setInt("TessLevel", 50);
         glBindVertexArray(VAO);
         glPatchParameteri(GL_PATCH_VERTICES, 16);
         glDrawArrays(GL_PATCHES, 0, 16);

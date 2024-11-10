@@ -750,7 +750,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         }
         renderer.addMesh(spline, &splineCurveProgram);
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
-    
+    bool bHidden = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
         splineSurfaceContainer.controlPoints = controlPoints;
         std::vector<glm::vec3> locations{};
@@ -771,7 +771,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             });
         }
         renderer.addMesh(splineSurface, &splineSurfaceProgram);
-        renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
+//        renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
     bool bAlreadyClicked = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
@@ -780,11 +780,12 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         }
         //read in bpt file
         std::string line;
-        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teapot.bpt");
+        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teaspoon.bpt");
+        int nSurfaces = 0;
         if (myfile.is_open())
         {
             std::getline(myfile,line);
-            int nSurfaces = std::stoi(line);
+            nSurfaces = std::stoi(line);
             for (int i = 0; i < nSurfaces; ++i) {
                 //skip the first line
                 std::getline(myfile,line);
@@ -796,7 +797,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                     while (iss >> coordinate) {
                         position.push_back(std::stof(coordinate));
                     }
-                    std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+                    std::shared_ptr<Shape> controlPoint = CubeBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
                     controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
                     controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(position[0], position[1], position[2])));
                     controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
@@ -810,12 +811,60 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                     locations.push_back(controlPoints[j]->getPosition());
                 }
                 std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
+                splineSurface->setColour(glm::vec3(float(i)/(float)nSurfaces, 0.0f, 0.0f));
                 splineSurfaceContainer.splines.push_back(splineSurface);
             }
             myfile.close();
+            int tick = 0;
+            std::vector<glm::vec3> startPositions{};
+            for (auto controlPoint : controlPoints) {
+                startPositions.push_back(controlPoint->getPosition());
+            }
+            int delay = 0;
+            bool bGoingUp = true;
+            renderer.addPreRenderCustomization([&bHidden, bGoingUp, delay, tick, startPositions, &splineSurfaceContainer, &controlPoints]() mutable {
+                // linearly interpolate between current position and some plane
+                //in chunks of 16 control points linearly interpolate between -x and x
+                ++delay;
+                if (delay < 100) {
+                    return;
+                }
+                float left_surface = -1.f * (float)splineSurfaceContainer.splines.size() / 5.f;
+                //need the size of the surface, say 8 for now.
+                for (int i = 0; i < splineSurfaceContainer.splines.size(); ++i) {
+                    for (int j = 16 * i; j < 16 + 16 * i; ++j) {
+                        glm::vec3 targetPosition = glm::vec3(left_surface + (i * .4), -2.f + (j % 4), -2.0f + ((j % 16) / 4));
+                        glm::vec3 startPosition = startPositions[j];
+                        glm::vec3 newPosition = startPosition * (1-((float)tick/500.f)) + targetPosition * ((float)tick/500.f);
+                        std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[i])->updateLocation(j % 16, newPosition);
+                        if (!bHidden) {
+                            controlPoints[j]->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1,.1,.1)));
+                            controlPoints[j]->updateModellingTransform(glm::translate(glm::mat4(1.0f), newPosition));
+                        }
+                    }
+                }
+                if (bGoingUp) {
+                    if (tick < 100) {
+                        ++tick;
+                    }
+                    else {
+                        bGoingUp = false;
+                    }
+                }
+                else {
+                    if (tick > 0) {
+                        --tick;
+                    }
+                    else {
+                        bGoingUp = true;
+                        delay = -100;
+                    }
+                }
+            });
         }
         else {
             std::cerr << "Error opening file: " << std::strerror(errno) << std::endl;
+            return;
         }
         bAlreadyClicked = true;
         std::shared_ptr<Shape> bundle = std::shared_ptr<SplineSurfaceBundle>(new SplineSurfaceBundle(splineSurfaceContainer.splines));
@@ -833,15 +882,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                 }
             });
         }
-//        renderer.addPreRenderCustomization([bundle, &controlPoints]() {
-//            double time = glfwGetTime();
-//            float amplitude = 10.f;     // Half-width of the oscillation
-//            float frequency = .25f;     // Cycles per second (Hz)
-//            float x = 2.0f * M_PI * frequency * time;
-//            bundle->setModelingTransform(glm::rotate(glm::mat4(1.0f), x, glm::vec3(0, 0.f,1)));
-//        });
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
-    bool bHidden = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
         if (bHidden) {
             for (auto controlPoint : controlPoints) {
@@ -1223,7 +1264,7 @@ void chipEightInterpreter(GLFWwindow* window) {
         }
     }
     //load game into ram
-    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Lunar Lander (Udo Pernisz, 1979).ch8", std::ios::binary);
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Particle Demo [zeroZshadow, 2008].ch8", std::ios::binary);
     if (!inputFile) {
         std::cerr << "Failed to open the file." << std::endl;
         return;

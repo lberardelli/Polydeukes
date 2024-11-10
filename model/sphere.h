@@ -201,7 +201,7 @@ private:
     
     SphereBuilder() {
         if (!sphereFactory) {
-            sphereFactory = new SphereFactory(0.5, 35, 35);
+            sphereFactory = new SphereFactory(0.5, 10, 10);
         }
         shape = sphereFactory->build();
     }
