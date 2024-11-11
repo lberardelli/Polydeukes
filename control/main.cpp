@@ -1290,19 +1290,22 @@ void chipEightInterpreter(GLFWwindow* window) {
 
 
 void objFileInterpeter(GLFWwindow* window) {
-    std::string objFile = "/Users/lawrenceberardelli/Downloads/cow.obj";
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/al.obj";
     std::ifstream inputFile(objFile);
     if (!inputFile) {
         std::cerr << "Failed to open the file " << objFile << std::endl;
     }
     std::string line{};
     std::vector<glm::vec3> positions{};
-    std::vector<std::array<int, 3>> faces{};
+    std::vector<std::vector<int>> faces{};
     while (std::getline(inputFile,line)) {
+        if (line.length() == 0) {
+            continue;
+        }
         if (line.at(0) == '#') {
             continue;
         }
-        if (line.at(0) == 'v') {
+        if (line.at(0) == 'v' && line.at(1) == ' ') {
             std::vector<std::string> tokens;
             std::stringstream ss(line);
             std::string token;
@@ -1314,15 +1317,62 @@ void objFileInterpeter(GLFWwindow* window) {
             continue;
         }
         if (line.at(0) == 'f') {
-            std::vector<std::string> tokens;
-            std::stringstream ss(line);
-            std::string token;
-            while (std::getline(ss, token, ' ')) {
-                tokens.push_back(token);
+            if (line.find('/') == std::string::npos) {
+                std::vector<std::string> tokens;
+                std::stringstream ss(line);
+                std::string token;
+                while (std::getline(ss, token, ' ')) {
+                    tokens.push_back(token);
+                }
+                std::vector<int> face{};
+                for (int i = 1; i < tokens.size(); ++i) {
+                    face.push_back(std::stoi(tokens[i])-1);
+                }
+                faces.push_back(face);
+                continue;
+            } else if (line.find("//") != std::string::npos) {
+                std::vector<std::string> tokens;
+                std::stringstream ss(line);
+                std::string token;
+                while (std::getline(ss, token, ' ')) {
+                    token.substr(0, token.find("//", 0));
+                    tokens.push_back(token);
+                }
+                std::vector<int> face{};
+                for (int i = 1; i < tokens.size(); ++i) {
+                    face.push_back(std::stoi(tokens[i])-1);
+                }
+                faces.push_back(face);
+                continue;
+            } else if (std::count(line.begin(), line.end(), '/') == 3) {
+                std::vector<std::string> tokens;
+                std::stringstream ss(line);
+                std::string token;
+                while (std::getline(ss, token, ' ')) {
+                    token.substr(0, token.find('/', 0));
+                    tokens.push_back(token);
+                }
+                std::vector<int> face{};
+                for (int i = 1; i < tokens.size(); ++i) {
+                    face.push_back(std::stoi(tokens[i])-1);
+                }
+                faces.push_back(face);
+                continue;
+            } else {
+                std::vector<std::string> tokens;
+                std::stringstream ss(line);
+                std::string token;
+                while (std::getline(ss, token, ' ')) {
+                    token = token.substr(0, token.find('/'));
+                    tokens.push_back(token);
+                }
+                std::vector<int> face{};
+                for (int i = 1; i < tokens.size(); ++i) {
+                    face.push_back(std::stoi(tokens[i])-1);
+                }
+                faces.push_back(face);
+                continue;
             }
-            std::array<int, 3> face{std::stoi(tokens[1])-1, std::stoi(tokens[2])-1, std::stoi(tokens[3])-1};
-            faces.push_back(face);
-            continue;
         }
     }
     class ArbitraryShape : public Shape {
@@ -1334,15 +1384,32 @@ void objFileInterpeter(GLFWwindow* window) {
         
         ArbitraryShape(std::vector<float> vertices, unsigned int VAO, unsigned int VBO) : vertices(vertices), VAO(VAO), VBO(VBO) {}
     public:
-        ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::array<int, 3>> faces) {
+        ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::vector<int>> faces) {
             for (auto face : faces) {
-                glm::vec3 u = positions[face[0]] - positions[face[1]];
-                glm::vec3 v = positions[face[0]] - positions[face[2]];
-                glm::vec3 normal = glm::cross(u, v);
-                for (int i = 0; i < 3; ++i) {
-                    vertices.push_back(positions[face[i]].x);
-                    vertices.push_back(positions[face[i]].y);
-                    vertices.push_back(positions[face[i]].z);
+                glm::vec3 anchor = positions[face[0]];
+                for (int i = 2; i < face.size(); ++i) {
+                    glm::vec3 first = positions[face[i-1]];
+                    glm::vec3 second = positions[face[i]];
+                    glm::vec3 u = anchor - first;
+                    glm::vec3 v = anchor - second;
+                    glm::vec3 normal = glm::cross(u, v);
+                    vertices.push_back(anchor.x);
+                    vertices.push_back(anchor.y);
+                    vertices.push_back(anchor.z);
+                    vertices.push_back(normal.x);
+                    vertices.push_back(normal.y);
+                    vertices.push_back(normal.z);
+                    
+                    vertices.push_back(first.x);
+                    vertices.push_back(first.y);
+                    vertices.push_back(first.z);
+                    vertices.push_back(normal.x);
+                    vertices.push_back(normal.y);
+                    vertices.push_back(normal.z);
+                    
+                    vertices.push_back(second.x);
+                    vertices.push_back(second.y);
+                    vertices.push_back(second.z);
                     vertices.push_back(normal.x);
                     vertices.push_back(normal.y);
                     vertices.push_back(normal.z);
@@ -1375,6 +1442,7 @@ void objFileInterpeter(GLFWwindow* window) {
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
     Arcball arcball(&camera);
+    camera.enableFreeCameraMovement(window);
     arcball.enable(window);
     Scene theScene{};
     Renderer renderer(&theScene,&program);
