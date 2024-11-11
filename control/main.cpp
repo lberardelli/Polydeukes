@@ -24,6 +24,7 @@
 #include "../model/particle.h"
 #include "../model/axies.h"
 #include "../model/spline.h"
+#include "../model/objinterpreter.h"
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -780,7 +781,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         }
         //read in bpt file
         std::string line;
-        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/finger.bpt");
+        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teaspoon.bpt");
         int nSurfaces = 0;
         if (myfile.is_open())
         {
@@ -1306,115 +1307,7 @@ std::vector<int> parseFaceLine(std::string delim, std::string line) {
 }
 
 void objFileInterpeter(GLFWwindow* window) {
-    std::string objFile = "/Users/lawrenceberardelli/Downloads/pumpkin.obj";
-    std::ifstream inputFile(objFile);
-    if (!inputFile) {
-        std::cerr << "Failed to open the file " << objFile << std::endl;
-    }
-    std::string line{};
-    std::vector<glm::vec3> positions{};
-    std::vector<std::vector<int>> faces{};
-    
-    while (std::getline(inputFile,line)) {
-        if (line.length() == 0) {
-            continue;
-        }
-        if (line.at(0) == '#') {
-            continue;
-        }
-        if (line.at(0) == 'v' && line.at(1) == ' ') {
-            std::vector<std::string> tokens;
-            std::stringstream ss(line);
-            std::string token;
-            while (std::getline(ss, token, ' ')) {
-                tokens.push_back(token);
-            }
-            glm::vec3 position = glm::vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
-            positions.push_back(position);
-            continue;
-        }
-        if (line.at(0) == 'f') {
-            if (line.find('/') == std::string::npos)
-            {
-                faces.push_back(parseFaceLine("", line));
-            } 
-            else if (line.find("//") != std::string::npos)
-            {
-                faces.push_back(parseFaceLine("//", line));
-            }
-            else if (std::count(line.begin(), line.end(), '/') == 3)
-            {
-                faces.push_back(parseFaceLine("/", line));
-            } 
-            else
-            {
-                faces.push_back(parseFaceLine("/", line));
-            }
-        }
-    }
-    class ArbitraryShape : public Shape {
-    private:
-        std::vector<float> vertices;
-        std::vector<float> normals;
-        std::vector<float> textureCoords;
-        unsigned int VAO, VBO;
-        
-        ArbitraryShape(std::vector<float> vertices, unsigned int VAO, unsigned int VBO) : vertices(vertices), VAO(VAO), VBO(VBO) {}
-    public:
-        ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::vector<int>> faces) {
-            for (auto face : faces) {
-                glm::vec3 anchor = positions[face[0]];
-                for (int i = 2; i < face.size(); ++i) {
-                    glm::vec3 first = positions[face[i-1]];
-                    glm::vec3 second = positions[face[i]];
-                    glm::vec3 u = anchor - first;
-                    glm::vec3 v = anchor - second;
-                    glm::vec3 normal = glm::cross(u, v);
-                    vertices.push_back(anchor.x);
-                    vertices.push_back(anchor.y);
-                    vertices.push_back(anchor.z);
-                    vertices.push_back(normal.x);
-                    vertices.push_back(normal.y);
-                    vertices.push_back(normal.z);
-                    
-                    vertices.push_back(first.x);
-                    vertices.push_back(first.y);
-                    vertices.push_back(first.z);
-                    vertices.push_back(normal.x);
-                    vertices.push_back(normal.y);
-                    vertices.push_back(normal.z);
-                    
-                    vertices.push_back(second.x);
-                    vertices.push_back(second.y);
-                    vertices.push_back(second.z);
-                    vertices.push_back(normal.x);
-                    vertices.push_back(normal.y);
-                    vertices.push_back(normal.z);
-                }
-            }
-            glGenVertexArrays(1, &VAO);
-            glGenBuffers(1, &VBO);
-            glBindVertexArray(VAO);
-            glBindBuffer(GL_ARRAY_BUFFER, VBO);
-            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(float) * 6, (void*)0);
-            glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(float) * 6, (void*)(3*sizeof(float)));
-            glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1);
-            glBindVertexArray(0);
-        }
-        
-        void render(ShaderProgram shaderProgram) {
-            shaderProgram.setMat4("model", modellingTransform);
-            shaderProgram.setVec3("aColour", colour);
-            glBindVertexArray(VAO);
-            glDrawArrays(GL_TRIANGLES, 0, (int)vertices.size() / 6);
-        }
-        
-        std::shared_ptr<Shape> clone() {
-            return std::shared_ptr<ArbitraryShape>(new ArbitraryShape(vertices, VAO, VBO));
-        }
-    };
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/teddy.obj";
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/basicVertexShader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
@@ -1423,7 +1316,7 @@ void objFileInterpeter(GLFWwindow* window) {
     arcball.enable(window);
     Scene theScene{};
     Renderer renderer(&theScene,&program);
-    std::shared_ptr<ArbitraryShape> shape = std::shared_ptr<ArbitraryShape>(new ArbitraryShape(positions, faces));
+    std::shared_ptr<Shape> shape = objInterpreter::interpretObjFile(objFile);
     renderer.addMesh(shape);
     renderer.buildandrender(window, &camera, &theScene);
 }
