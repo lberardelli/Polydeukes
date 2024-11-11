@@ -1288,9 +1288,25 @@ void chipEightInterpreter(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+std::vector<int> parseFaceLine(std::string delim, std::string line) {
+    std::vector<std::string> tokens;
+    std::stringstream ss(line);
+    std::string token;
+    while (std::getline(ss, token, ' ')) {
+        if (delim != "") {
+            token = token.substr(0, token.find(delim, 0));
+        }
+        tokens.push_back(token);
+    }
+    std::vector<int> face{};
+    for (int i = 1; i < tokens.size(); ++i) {
+        face.push_back(std::stoi(tokens[i])-1);
+    }
+    return face;
+}
 
 void objFileInterpeter(GLFWwindow* window) {
-    std::string objFile = "/Users/lawrenceberardelli/Downloads/al.obj";
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/pumpkin.obj";
     std::ifstream inputFile(objFile);
     if (!inputFile) {
         std::cerr << "Failed to open the file " << objFile << std::endl;
@@ -1298,6 +1314,7 @@ void objFileInterpeter(GLFWwindow* window) {
     std::string line{};
     std::vector<glm::vec3> positions{};
     std::vector<std::vector<int>> faces{};
+    
     while (std::getline(inputFile,line)) {
         if (line.length() == 0) {
             continue;
@@ -1317,61 +1334,21 @@ void objFileInterpeter(GLFWwindow* window) {
             continue;
         }
         if (line.at(0) == 'f') {
-            if (line.find('/') == std::string::npos) {
-                std::vector<std::string> tokens;
-                std::stringstream ss(line);
-                std::string token;
-                while (std::getline(ss, token, ' ')) {
-                    tokens.push_back(token);
-                }
-                std::vector<int> face{};
-                for (int i = 1; i < tokens.size(); ++i) {
-                    face.push_back(std::stoi(tokens[i])-1);
-                }
-                faces.push_back(face);
-                continue;
-            } else if (line.find("//") != std::string::npos) {
-                std::vector<std::string> tokens;
-                std::stringstream ss(line);
-                std::string token;
-                while (std::getline(ss, token, ' ')) {
-                    token.substr(0, token.find("//", 0));
-                    tokens.push_back(token);
-                }
-                std::vector<int> face{};
-                for (int i = 1; i < tokens.size(); ++i) {
-                    face.push_back(std::stoi(tokens[i])-1);
-                }
-                faces.push_back(face);
-                continue;
-            } else if (std::count(line.begin(), line.end(), '/') == 3) {
-                std::vector<std::string> tokens;
-                std::stringstream ss(line);
-                std::string token;
-                while (std::getline(ss, token, ' ')) {
-                    token.substr(0, token.find('/', 0));
-                    tokens.push_back(token);
-                }
-                std::vector<int> face{};
-                for (int i = 1; i < tokens.size(); ++i) {
-                    face.push_back(std::stoi(tokens[i])-1);
-                }
-                faces.push_back(face);
-                continue;
-            } else {
-                std::vector<std::string> tokens;
-                std::stringstream ss(line);
-                std::string token;
-                while (std::getline(ss, token, ' ')) {
-                    token = token.substr(0, token.find('/'));
-                    tokens.push_back(token);
-                }
-                std::vector<int> face{};
-                for (int i = 1; i < tokens.size(); ++i) {
-                    face.push_back(std::stoi(tokens[i])-1);
-                }
-                faces.push_back(face);
-                continue;
+            if (line.find('/') == std::string::npos)
+            {
+                faces.push_back(parseFaceLine("", line));
+            } 
+            else if (line.find("//") != std::string::npos)
+            {
+                faces.push_back(parseFaceLine("//", line));
+            }
+            else if (std::count(line.begin(), line.end(), '/') == 3)
+            {
+                faces.push_back(parseFaceLine("/", line));
+            } 
+            else
+            {
+                faces.push_back(parseFaceLine("/", line));
             }
         }
     }
