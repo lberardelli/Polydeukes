@@ -780,7 +780,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         }
         //read in bpt file
         std::string line;
-        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teaspoon.bpt");
+        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/finger.bpt");
         int nSurfaces = 0;
         if (myfile.is_open())
         {
@@ -822,7 +822,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             }
             int delay = 0;
             bool bGoingUp = true;
-            renderer.addPreRenderCustomization([&bHidden, bGoingUp, delay, tick, startPositions, &splineSurfaceContainer, &controlPoints]() mutable {
+            auto foldUnfoldAnimation = [&bHidden, bGoingUp, delay, tick, startPositions, &splineSurfaceContainer, &controlPoints]() mutable {
                 // linearly interpolate between current position and some plane
                 //in chunks of 16 control points linearly interpolate between -x and x
                 ++delay;
@@ -860,7 +860,8 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                         delay = -100;
                     }
                 }
-            });
+            };
+            //renderer.addPreRenderCustomization(foldUnfoldAnimation);
         }
         else {
             std::cerr << "Error opening file: " << std::strerror(errno) << std::endl;
@@ -903,7 +904,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
 
 class Chip8InputHandler {
     static const int constexpr key_codes[16] = {
-        305, 306, 307, 308, 282, 336, 331, 332, 327, 328, 329, 333, 324, 325, 326, 334
+        GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_Q, GLFW_KEY_W, GLFW_KEY_E, GLFW_KEY_A, GLFW_KEY_S, GLFW_KEY_D, GLFW_KEY_F, GLFW_KEY_Z, GLFW_KEY_X, GLFW_KEY_C, GLFW_KEY_V, 10
     };
     
     static bool is_key_pressed[16];
@@ -977,7 +978,7 @@ public:
         }
     
     void fetchDecodeExecute() {
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 5; ++i) {
             unsigned int instruction = (ram[programCounter] << 8) | ram[programCounter + 1];
             programCounter += 2;
             if (instruction == 0x00E0) {
@@ -1264,7 +1265,7 @@ void chipEightInterpreter(GLFWwindow* window) {
         }
     }
     //load game into ram
-    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Particle Demo [zeroZshadow, 2008].ch8", std::ios::binary);
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/snake.ch8", std::ios::binary);
     if (!inputFile) {
         std::cerr << "Failed to open the file." << std::endl;
         return;
@@ -1284,6 +1285,101 @@ void chipEightInterpreter(GLFWwindow* window) {
     renderer.addPreRenderCustomization([&interpreter]() {
         interpreter.fetchDecodeExecute();
     });
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+
+void objFileInterpeter(GLFWwindow* window) {
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/cow.obj";
+    std::ifstream inputFile(objFile);
+    if (!inputFile) {
+        std::cerr << "Failed to open the file " << objFile << std::endl;
+    }
+    std::string line{};
+    std::vector<glm::vec3> positions{};
+    std::vector<std::array<int, 3>> faces{};
+    while (std::getline(inputFile,line)) {
+        if (line.at(0) == '#') {
+            continue;
+        }
+        if (line.at(0) == 'v') {
+            std::vector<std::string> tokens;
+            std::stringstream ss(line);
+            std::string token;
+            while (std::getline(ss, token, ' ')) {
+                tokens.push_back(token);
+            }
+            glm::vec3 position = glm::vec3(std::stof(tokens[1]), std::stof(tokens[2]), std::stof(tokens[3]));
+            positions.push_back(position);
+            continue;
+        }
+        if (line.at(0) == 'f') {
+            std::vector<std::string> tokens;
+            std::stringstream ss(line);
+            std::string token;
+            while (std::getline(ss, token, ' ')) {
+                tokens.push_back(token);
+            }
+            std::array<int, 3> face{std::stoi(tokens[1])-1, std::stoi(tokens[2])-1, std::stoi(tokens[3])-1};
+            faces.push_back(face);
+            continue;
+        }
+    }
+    class ArbitraryShape : public Shape {
+    private:
+        std::vector<float> vertices;
+        std::vector<int> indices;
+        unsigned int VAO, VBO, EBO;
+        
+        ArbitraryShape(std::vector<float> vertices, std::vector<int> indices, unsigned int VAO, unsigned int VBO, unsigned int EBO) : vertices(vertices), indices(indices), VAO(VAO), VBO(VBO), EBO(EBO) {}
+    public:
+        ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::array<int, 3>> faces) {
+            for (auto pos : positions) {
+                vertices.push_back(pos.x);
+                vertices.push_back(pos.y);
+                vertices.push_back(pos.z);
+                std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
+            }
+            for (auto face : faces) {
+                for (int i = 0; i < 3; ++i) {
+                    indices.push_back(face[i]);
+                    std::cout << face[i] << " ";
+                }
+                std::cout << std::endl;
+            }
+            glGenVertexArrays(1, &VAO);
+            glGenBuffers(1, &EBO);
+            glGenBuffers(1, &VBO);
+            glBindVertexArray(VAO);
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(int), indices.data(), GL_STATIC_DRAW);
+            glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(float) * 3, (void*)0);
+            glEnableVertexAttribArray(0);
+            glBindVertexArray(0);
+        }
+        
+        void render(ShaderProgram shaderProgram) {
+            shaderProgram.setMat4("model", modellingTransform);
+            shaderProgram.setVec3("aColour", colour);
+            glBindVertexArray(VAO);
+            glDrawElements(GL_TRIANGLES, (unsigned int)indices.size(), GL_UNSIGNED_INT, 0);
+        }
+        
+        std::shared_ptr<Shape> clone() {
+            return std::shared_ptr<ArbitraryShape>(new ArbitraryShape(vertices, indices, VAO, VBO, EBO));
+        }
+    };
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/basicVertexShader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Arcball arcball(&camera);
+    arcball.enable(window);
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    std::shared_ptr<ArbitraryShape> shape = std::shared_ptr<ArbitraryShape>(new ArbitraryShape(positions, faces));
+    renderer.addMesh(shape);
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -1314,7 +1410,7 @@ int main(int argc, const char * argv[]) {
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    renderGPUSplineStudy(window);
+    objFileInterpeter(window);
 
     glfwTerminate();
     return 0;

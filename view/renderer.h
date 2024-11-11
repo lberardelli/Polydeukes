@@ -43,7 +43,7 @@ private:
     Scene* theScene;
     std::vector<Particle> particles{};
     glm::mat4 view;
-    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)screen_width / (float)screen_height, 0.1f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)screen_width / (float)screen_height, 0.1f, 1000.0f);
     std::function<void()> preRenderCustomization = [] {};
     static float fov;
     
@@ -161,7 +161,7 @@ public:
         this->theScene = theScene;
         defaultProgram->setInt("texture1", 0);
         light light(glm::vec3(1.0,1.0,1.0), glm::vec3(0.0, -5.0, 4.0));
-        //addMesh(CubeBuilder().withPosition(light.position).withColour(glm::vec3(1.0f,1.0f,1.0f)).build());
+        addMesh(CubeBuilder().withPosition(light.position).withColour(glm::vec3(1.0f,1.0f,1.0f)).build());
         ShaderProgram* previousProgram = 0;
         double framerate = 60;
         int i = 1;
