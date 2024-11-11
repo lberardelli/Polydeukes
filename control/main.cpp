@@ -1328,35 +1328,35 @@ void objFileInterpeter(GLFWwindow* window) {
     class ArbitraryShape : public Shape {
     private:
         std::vector<float> vertices;
-        std::vector<int> indices;
-        unsigned int VAO, VBO, EBO;
+        std::vector<float> normals;
+        std::vector<float> textureCoords;
+        unsigned int VAO, VBO;
         
-        ArbitraryShape(std::vector<float> vertices, std::vector<int> indices, unsigned int VAO, unsigned int VBO, unsigned int EBO) : vertices(vertices), indices(indices), VAO(VAO), VBO(VBO), EBO(EBO) {}
+        ArbitraryShape(std::vector<float> vertices, unsigned int VAO, unsigned int VBO) : vertices(vertices), VAO(VAO), VBO(VBO) {}
     public:
         ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::array<int, 3>> faces) {
-            for (auto pos : positions) {
-                vertices.push_back(pos.x);
-                vertices.push_back(pos.y);
-                vertices.push_back(pos.z);
-                std::cout << pos.x << " " << pos.y << " " << pos.z << std::endl;
-            }
             for (auto face : faces) {
+                glm::vec3 u = positions[face[0]] - positions[face[1]];
+                glm::vec3 v = positions[face[0]] - positions[face[2]];
+                glm::vec3 normal = glm::cross(u, v);
                 for (int i = 0; i < 3; ++i) {
-                    indices.push_back(face[i]);
-                    std::cout << face[i] << " ";
+                    vertices.push_back(positions[face[i]].x);
+                    vertices.push_back(positions[face[i]].y);
+                    vertices.push_back(positions[face[i]].z);
+                    vertices.push_back(normal.x);
+                    vertices.push_back(normal.y);
+                    vertices.push_back(normal.z);
                 }
-                std::cout << std::endl;
             }
             glGenVertexArrays(1, &VAO);
-            glGenBuffers(1, &EBO);
             glGenBuffers(1, &VBO);
             glBindVertexArray(VAO);
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(int), indices.data(), GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(float) * 3, (void*)0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(float) * 6, (void*)0);
+            glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(float) * 6, (void*)(3*sizeof(float)));
             glEnableVertexAttribArray(0);
+            glEnableVertexAttribArray(1);
             glBindVertexArray(0);
         }
         
@@ -1364,11 +1364,11 @@ void objFileInterpeter(GLFWwindow* window) {
             shaderProgram.setMat4("model", modellingTransform);
             shaderProgram.setVec3("aColour", colour);
             glBindVertexArray(VAO);
-            glDrawElements(GL_TRIANGLES, (unsigned int)indices.size(), GL_UNSIGNED_INT, 0);
+            glDrawArrays(GL_TRIANGLES, 0, (int)vertices.size() / 6);
         }
         
         std::shared_ptr<Shape> clone() {
-            return std::shared_ptr<ArbitraryShape>(new ArbitraryShape(vertices, indices, VAO, VBO, EBO));
+            return std::shared_ptr<ArbitraryShape>(new ArbitraryShape(vertices, VAO, VBO));
         }
     };
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/basicVertexShader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
