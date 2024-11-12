@@ -1307,8 +1307,8 @@ std::vector<int> parseFaceLine(std::string delim, std::string line) {
 }
 
 void objFileInterpeter(GLFWwindow* window) {
-    std::string objFile = "/Users/lawrenceberardelli/Downloads/teddy.obj";
-    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/basicVertexShader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/hand.obj";
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
     Arcball arcball(&camera);

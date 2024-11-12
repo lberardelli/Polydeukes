@@ -16,14 +16,12 @@ class objInterpreter {
 private:
     class ArbitraryShape : public Shape {
     private:
-        std::vector<float> vertices;
-        std::vector<float> normals;
-        std::vector<float> textureCoords;
         unsigned int VAO, VBO;
         
-        ArbitraryShape(std::vector<float> vertices, unsigned int VAO, unsigned int VBO) : vertices(vertices), VAO(VAO), VBO(VBO) {}
+        ArbitraryShape(ArbitraryShape& that) : Shape(that), VAO(that.VAO), VBO(that.VBO) {}
     public:
         ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::vector<int>> faces) {
+            std::vector<float> vertices;
             for (auto face : faces) {
                 glm::vec3 anchor = positions[face[0]];
                 for (int i = 2; i < face.size(); ++i) {
@@ -38,6 +36,8 @@ private:
                     vertices.push_back(normal.x);
                     vertices.push_back(normal.y);
                     vertices.push_back(normal.z);
+                    vertices.push_back(0.f);
+                    vertices.push_back(0.f);
                     
                     vertices.push_back(first.x);
                     vertices.push_back(first.y);
@@ -45,6 +45,8 @@ private:
                     vertices.push_back(normal.x);
                     vertices.push_back(normal.y);
                     vertices.push_back(normal.z);
+                    vertices.push_back(0.f);
+                    vertices.push_back(0.f);
                     
                     vertices.push_back(second.x);
                     vertices.push_back(second.y);
@@ -52,17 +54,22 @@ private:
                     vertices.push_back(normal.x);
                     vertices.push_back(normal.y);
                     vertices.push_back(normal.z);
+                    vertices.push_back(0.f);
+                    vertices.push_back(0.f);
                 }
             }
+            mesh = Mesh(vertices.data(), vertices.size());
             glGenVertexArrays(1, &VAO);
             glGenBuffers(1, &VBO);
             glBindVertexArray(VAO);
             glBindBuffer(GL_ARRAY_BUFFER, VBO);
             glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-            glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(float) * 6, (void*)0);
-            glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(float) * 6, (void*)(3*sizeof(float)));
+            glVertexAttribPointer(0, 3, GL_FLOAT, false, sizeof(float) * 8, (void*)0);
+            glVertexAttribPointer(1, 3, GL_FLOAT, false, sizeof(float) * 8, (void*)(3*sizeof(float)));
+            glVertexAttribPointer(2, 2, GL_FLOAT, false, sizeof(float) * 8, (void*)(6*sizeof(float)));
             glEnableVertexAttribArray(0);
             glEnableVertexAttribArray(1);
+            glEnableVertexAttribArray(2);
             glBindVertexArray(0);
         }
         
@@ -70,11 +77,13 @@ private:
             shaderProgram.setMat4("model", modellingTransform);
             shaderProgram.setVec3("aColour", colour);
             glBindVertexArray(VAO);
-            glDrawArrays(GL_TRIANGLES, 0, (int)vertices.size() / 6);
+            glDrawArrays(GL_TRIANGLES, 0, (int)mesh.getPosition().size() * 3);
+            std::vector<glm::vec3> positions = mesh.getPosition();
+            //renderAABB(computeAABB(positions), shaderProgram);
         }
         
         std::shared_ptr<Shape> clone() {
-            return std::shared_ptr<ArbitraryShape>(new ArbitraryShape(vertices, VAO, VBO));
+            return std::shared_ptr<ArbitraryShape>(new ArbitraryShape(*this));
         }
     };
     
