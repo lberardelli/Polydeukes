@@ -17,8 +17,8 @@ private:
     class ArbitraryShape : public Shape {
     private:
         unsigned int VAO, VBO;
-        
-        ArbitraryShape(ArbitraryShape& that) : Shape(that), VAO(that.VAO), VBO(that.VBO) {}
+        unsigned int nVertices = 0;
+        ArbitraryShape(ArbitraryShape& that) : Shape(that), VAO(that.VAO), VBO(that.VBO), nVertices(that.nVertices) {}
     public:
         ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::vector<int>> faces) {
             std::vector<float> vertices;
@@ -56,6 +56,7 @@ private:
                     vertices.push_back(normal.z);
                     vertices.push_back(0.f);
                     vertices.push_back(0.f);
+                    nVertices+=3;
                 }
             }
             mesh = Mesh(vertices.data(), vertices.size());
@@ -77,8 +78,8 @@ private:
             shaderProgram.setMat4("model", modellingTransform);
             shaderProgram.setVec3("aColour", colour);
             glBindVertexArray(VAO);
-            glDrawArrays(GL_TRIANGLES, 0, (int)mesh.getPosition().size() * 3);
-            std::vector<glm::vec3> positions = mesh.getPosition();
+            glDrawArrays(GL_TRIANGLES, 0, nVertices);
+            //std::vector<glm::vec3> positions = mesh.getPosition();
             //renderAABB(computeAABB(positions), shaderProgram);
         }
         
