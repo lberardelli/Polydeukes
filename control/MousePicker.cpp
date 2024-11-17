@@ -11,11 +11,12 @@
 
 int MousePicker::mousePositionX{};
 int MousePicker::mousePositionY{};
+void (*MousePicker::mousePositionCallback)(GLFWwindow*,double,double) = [](GLFWwindow* window, double d, double d2) {};
 Ray MousePicker::ray{};
 Renderer* MousePicker::renderer{};
 Camera* MousePicker::camera{};
 Scene* MousePicker::theScene{};
-std::shared_ptr<Shape> MousePicker::targetShape{};
+MousePicker::MouseRayCollision MousePicker::collisionData{};
 std::shared_ptr<Shape> MousePicker::currentlySelectedShape{};
 std::function<void(double,double)> MousePicker::clickCustomization{};
 std::function<void(double,double)> MousePicker::rightClickCustomization{};

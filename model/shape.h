@@ -160,8 +160,8 @@ public:
         rightClickCallback(referenceToThis);
     }
     
-    virtual void onClick() override {
-        clickCallback(referenceToThis);
+    virtual void onClick(glm::vec3 exactPosition = glm::vec3(0.0f,0.0f,0.f)) override {
+        clickCallback(referenceToThis, exactPosition);
     }
     
     virtual void onMouseUp() override {

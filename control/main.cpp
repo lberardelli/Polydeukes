@@ -781,7 +781,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         }
         //read in bpt file
         std::string line;
-        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teaspoon.bpt");
+        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teapot.bpt");
         int nSurfaces = 0;
         if (myfile.is_open())
         {
@@ -812,7 +812,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                     locations.push_back(controlPoints[j]->getPosition());
                 }
                 std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
-                splineSurface->setColour(glm::vec3(float(i)/(float)nSurfaces, 0.0f, 0.0f));
+                splineSurface->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
                 splineSurfaceContainer.splines.push_back(splineSurface);
             }
             myfile.close();
@@ -1307,7 +1307,7 @@ std::vector<int> parseFaceLine(std::string delim, std::string line) {
 }
 
 void objFileInterpeter(GLFWwindow* window) {
-    std::string objFile = "/Users/lawrenceberardelli/Downloads/cessna.obj";
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/hand.obj";
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
@@ -1317,6 +1317,37 @@ void objFileInterpeter(GLFWwindow* window) {
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     std::shared_ptr<Shape> shape = objInterpreter::interpretObjFile(objFile);
+    renderer.addMesh(shape);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mosPosx, double mosPosy) {
+        arcball.registerRotationCallback(window, mosPosx, mosPosy);
+    });
+    picker.enableRayTrianglePicker(window);
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void riggingModule(GLFWwindow* window) {
+    std::string objFile = "/Users/lawrenceberardelli/Downloads/hand.obj";
+    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Arcball arcball(&camera);
+    Scene theScene{};
+    MeshDragger::camera = &camera;
+    Renderer renderer(&theScene,&program);
+    auto lineFill = CubeBuilder().withColour(glm::vec3(.0f,0.0f,0.0f)).withOnClickCallback([&window](auto theShape){
+        MeshDragger::registerMousePositionCallback(window, theShape);
+    }).build();
+    LineDrawer::camera = &camera;
+    auto picker = MousePicker(&renderer, &camera, &theScene, [&](double x, double y) { arcball.registerRotationCallback(window, x, y);});
+    camera.enableFreeCameraMovement(window);
+    picker.enableRayTrianglePicker(window);
+    std::shared_ptr<Shape> shape = objInterpreter::interpretObjFile(objFile);
+    shape->setOnClick([&](std::weak_ptr<Shape> theShape, glm::vec3 exactPosition) {
+        auto fillcpy = lineFill->clone();
+        fillcpy->setModelingTransform(glm::translate(glm::mat4(1.0f), exactPosition));
+        renderer.addMesh(fillcpy);
+        LineDrawer::registerMousePositionCallback(window, exactPosition, fillcpy);
+    });
     renderer.addMesh(shape);
     renderer.buildandrender(window, &camera, &theScene);
 }
@@ -1348,7 +1379,7 @@ int main(int argc, const char * argv[]) {
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    objFileInterpeter(window);
+    riggingModule(window);
 
     glfwTerminate();
     return 0;

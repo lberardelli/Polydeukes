@@ -80,7 +80,7 @@ public:
         }
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
-//        Shape::renderAABB(getAABB(), shaderProgram);
+        Shape::renderAABB(getAABB(), shaderProgram);
     }
     
     std::shared_ptr<Shape> clone() override {

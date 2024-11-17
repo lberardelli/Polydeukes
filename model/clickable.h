@@ -14,7 +14,7 @@ template <typename T>
 class Clickable {
     
 protected:
-    std::function<void(std::weak_ptr<T>)> clickCallback = [](std::weak_ptr<T>){};
+    std::function<void(std::weak_ptr<T>, glm::vec3)> clickCallback = [](std::weak_ptr<T>, glm::vec3){};
     std::function<void(std::weak_ptr<T>)> hoverCallback = [](std::weak_ptr<T>){};
     std::function<void(std::weak_ptr<T>)> offHoverCallback = [](std::weak_ptr<T>){};
     std::function<void(std::weak_ptr<T>)> onMouseUpCallback = [](std::weak_ptr<T>){};
@@ -24,7 +24,7 @@ protected:
     
 public:
     
-    virtual void onClick() {
+    virtual void onClick(glm::vec3 exactPosition) {
         
     }
     
@@ -53,6 +53,10 @@ public:
     }
     
     virtual void setOnClick(std::function<void(std::weak_ptr<T>)> callback) {
+        clickCallback = std::bind(callback, std::placeholders::_1);
+    }
+    
+    virtual void setOnClick(std::function<void(std::weak_ptr<T>, glm::vec3)> callback) {
         clickCallback = callback;
     }
     

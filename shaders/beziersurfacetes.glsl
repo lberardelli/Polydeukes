@@ -91,7 +91,7 @@ void main()
     p30*bu[3]*dbv[0] + p31*bu[3]*dbv[1] + p32*bu[3]*dbv[2] +
     p33*bu[3]*dbv[3];
     // The normal vector is the cross product of the partials
-    vec3 n = normalize(cross(du.xyz, dv.xyz));
+    vec3 n = normalize(cross(dv.xyz, du.xyz));
     // Transform to clip coordinates
     gl_Position = view * model * gsPosition;
     // Convert to camera coordinates

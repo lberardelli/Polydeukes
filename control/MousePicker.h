@@ -90,6 +90,9 @@ public:
     static void lineDrawerPositionCallback(GLFWwindow* window, double mousePosX, double mousePosY) {
         glm::vec3 newPosition = LineDrawer::computeNewLocation(mousePosX, mousePosY, lineData.startPosition);
         lineData.endPosition = newPosition;
+        if (newPosition == lineData.startPosition) {
+            return;
+        }
         lineData.geometry.lock()->setModelingTransform(vector::scaleGeometryBetweenTwoPointsTransformation(newPosition, lineData.startPosition));
         lineData.geometry.lock()->onDrag();
     }
@@ -117,7 +120,14 @@ public:
     
     virtual void enable(GLFWwindow* window) {
         glfwSetMouseButtonCallback(window, mouse_button_callback);
-        glfwSetCursorPosCallback(window, mouse_position_callback);
+        mousePositionCallback = mouse_position_callback;
+        glfwSetCursorPosCallback(window, mousePositionCallback);
+    }
+    
+    virtual void enableRayTrianglePicker(GLFWwindow* window) {
+        glfwSetMouseButtonCallback(window, mouse_button_callback);
+        mousePositionCallback = ray_triangle_callback;
+        glfwSetCursorPosCallback(window, mousePositionCallback);
     }
     
     static Ray computeMouseRay(int mousePosX, int mousePosY) {
@@ -140,21 +150,85 @@ public:
     
 private:
     
+    struct MouseRayCollision {
+        std::shared_ptr<Shape> targetShape{};
+        glm::vec3 exactPosition{};
+    };
+    
+    static void resetCollisionData(MouseRayCollision& collision) {
+        collision.targetShape.reset();
+        collision.exactPosition = glm::vec3(0.0f,0.0f,0.0f);
+    }
+    
     static Renderer* renderer;
     static Camera* camera;
     static Scene* theScene;
     static int mousePositionX;
     static int mousePositionY;
     static Ray ray;
-    static std::shared_ptr<Shape> targetShape;
+    static MouseRayCollision collisionData;
     static std::shared_ptr<Shape> currentlySelectedShape;
     static std::function<void(double,double)> clickCustomization;
     static std::function<void(double,double)> rightClickCustomization;
+    static void (*mousePositionCallback)(GLFWwindow*, double, double);
     
     static void computeWorldRay() {
         Ray mouseRay = computeMouseRay(mousePositionX, mousePositionY);
         MousePicker::ray.direction = mouseRay.direction;
         MousePicker::ray.origin = mouseRay.origin;
+    }
+    
+    static std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> computeRayTriangleCollisions() {
+        std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates;
+        std::vector<std::shared_ptr<Shape>> sceneItems = theScene->get();
+        struct triangle {
+            triangle(glm::vec3 a, glm::vec3 b, glm::vec3 c) : a(a), b(b), c(c) {}
+            
+            glm::vec3 a,b,c;
+        };
+        int i = 0;
+        for (auto&& shape : sceneItems) {
+            if (i > 0) {
+                break;
+            }
+            ++i;
+            constexpr float epsilon = std::numeric_limits<float>::epsilon();
+            std::vector<glm::vec3> triangles = shape->getPositions();
+            for (int i = 0; i < triangles.size(); i+=3) {
+                triangle triangle(triangles[i], triangles[i+1], triangles[i+2]);
+                glm::vec3 edge1 = triangle.b - triangle.a;
+                glm::vec3 edge2 = triangle.c - triangle.a;
+                glm::vec3 ray_cross_e2 = cross(ray.direction, edge2);
+                float det = dot(edge1, ray_cross_e2);
+
+                if (det > -epsilon && det < epsilon)
+                    continue;    // This ray is parallel to this triangle.
+
+                float inv_det = 1.0 / det;
+                glm::vec3 s = ray.origin - triangle.a;
+                float u = inv_det * dot(s, ray_cross_e2);
+
+                if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u-1) > epsilon))
+                    continue;
+
+                glm::vec3 s_cross_e1 = cross(s, edge1);
+                float v = inv_det * dot(ray.direction, s_cross_e1);
+
+                if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u + v - 1) > epsilon))
+                    continue;
+
+                // At this stage we can compute t to find out where the intersection point is on the line.
+                float t = inv_det * dot(edge2, s_cross_e1);
+
+                if (t > epsilon) // ray intersection
+                {
+                    candidates.push_back(std::make_tuple(shape, glm::vec3(ray.origin + ray.direction * t)));
+                }
+                else // This means that there is a line intersection but not a ray intersection.
+                    continue;
+            }
+        }
+        return candidates;
     }
     
     static std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> computeCollisions() {
@@ -247,42 +321,66 @@ private:
     }
     
     static void init(GLFWwindow* window) {
-        glfwSetCursorPosCallback(window, mouse_position_callback);
+        mousePositionCallback = mouse_position_callback;
+        glfwSetCursorPosCallback(window, mousePositionCallback);
+    }
+    
+    static void initTrianglePicker(GLFWwindow* window) {
+        mousePositionCallback = ray_triangle_callback;
+        glfwSetCursorPosCallback(window, mousePositionCallback);
     }
     
     static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-            if (targetShape) {
-                currentlySelectedShape = targetShape;
-                targetShape->onClick();
+            if (collisionData.targetShape) {
+                currentlySelectedShape = collisionData.targetShape;
+                collisionData.targetShape->onClick(collisionData.exactPosition);
             }
             else {
                 clickCustomization(mousePositionX, mousePositionY);
             }
         }
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-            glfwSetCursorPosCallback(window, mouse_position_callback);
+            glfwSetCursorPosCallback(window, mousePositionCallback);
             if (currentlySelectedShape) {
                 currentlySelectedShape->onMouseUp();
                 currentlySelectedShape.reset();
             }
         }
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
-            if (targetShape) {
-                currentlySelectedShape = targetShape;
-                targetShape->onRightClick();
+            if (collisionData.targetShape) {
+                currentlySelectedShape = collisionData.targetShape;
+                collisionData.targetShape->onRightClick();
             }
             else {
                 rightClickCustomization(mousePositionX, mousePositionY);
             }
         }
         if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE) {
-            glfwSetCursorPosCallback(window, mouse_position_callback);
+            glfwSetCursorPosCallback(window, mousePositionCallback);
             if (currentlySelectedShape) {
                 currentlySelectedShape->onRightClickUp();
                 currentlySelectedShape.reset();
             }
         }
+    }
+    
+    static void ray_triangle_callback(GLFWwindow* window, double xpos, double ypos) {
+        mousePositionX = xpos;
+        mousePositionY = ypos;
+        computeWorldRay();
+        std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates = computeRayTriangleCollisions();
+        std::sort(candidates.begin(), candidates.end(), [](auto e, auto e2) {
+            glm::vec4 res1 = camera->viewingTransformation() * glm::vec4(std::get<1>(e), 1.0f);
+            glm::vec4 res2 = camera->viewingTransformation() * glm::vec4(std::get<1>(e2), 1.0f);
+            return res2.z < res1.z;
+        });
+        if (candidates.size() == 0) {
+            resetCollisionData(collisionData);
+            return;
+        }
+        collisionData.targetShape = std::get<0>(candidates.front());
+        collisionData.exactPosition = std::get<1>(candidates.front());
     }
     
     static void mouse_position_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -291,7 +389,7 @@ private:
         computeWorldRay();
         std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates = computeCollisions();
         if (candidates.empty()) {
-            targetShape.reset();
+            collisionData.targetShape.reset();
             return;
         }
         //select the closest shape to the camera
@@ -312,8 +410,9 @@ private:
                 return coordA.x < coordB.x; // If both z and y coordinates are equal, sort by x coordinate
             }
         });
-        targetShape = std::get<0>(candidates.back());
-        targetShape->onHover();
+        collisionData.targetShape = std::get<0>(candidates.back());
+        collisionData.exactPosition = std::get<1>(candidates.back());
+        collisionData.targetShape->onHover();
         candidates.pop_back();
         for (auto elt : candidates) {
             std::shared_ptr<Shape> shape = std::get<0>(elt);

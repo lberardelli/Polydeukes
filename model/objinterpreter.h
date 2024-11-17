@@ -20,7 +20,13 @@ private:
         unsigned int nVertices = 0;
         ArbitraryShape(ArbitraryShape& that) : Shape(that), VAO(that.VAO), VBO(that.VBO), nVertices(that.nVertices) {}
     public:
+        
+        virtual std::vector<glm::vec3> getAABB() override {
+            return {glm::vec3(0.f,0.f,0.f), glm::vec3(0.f,0.f,0.f)};
+        }
+        
         ArbitraryShape(std::vector<glm::vec3> positions, std::vector<std::vector<int>> faces) {
+            colour = glm::vec4(1.0f,1.0f,1.0f,.5f);
             std::vector<float> vertices;
             for (auto face : faces) {
                 glm::vec3 anchor = positions[face[0]];
@@ -77,8 +83,10 @@ private:
         void render(ShaderProgram shaderProgram) {
             shaderProgram.setMat4("model", modellingTransform);
             shaderProgram.setVec3("aColour", colour);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             glBindVertexArray(VAO);
             glDrawArrays(GL_TRIANGLES, 0, nVertices);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
             //std::vector<glm::vec3> positions = mesh.getPosition();
             //renderAABB(computeAABB(positions), shaderProgram);
         }

@@ -21,5 +21,5 @@ void main() {
     vec3 halfAngle = normalize((normalize(lightVector) + normalize(eye)) / 2.0f);
     float phong = max(pow(dot(halfAngle, normal), 1024), 0.0f);
     vec3 phongModel = phong * lightColour;
-    FragColor = vec4((ambient + diffusion + phongModel) * aColour, 1.0f);
+    FragColor = vec4((ambient + diffusion + phongModel) * aColour, 0.0f);
 }
