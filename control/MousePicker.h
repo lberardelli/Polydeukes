@@ -74,16 +74,23 @@ public:
     
     static Camera* camera;
     static LineData lineData;
+    static glm::vec3 normal;
     
     static glm::vec3 computeNewLocation(double mousePosX, double mousePosY, glm::vec3 initialPosition);
     
     static void registerMousePositionCallback(GLFWwindow* window, glm::vec3 startPosition, std::weak_ptr<Shape> geometry) {
         glfwSetCursorPosCallback(window, lineDrawerPositionCallback);
+        normal = camera->getDirection();
         lineData.startPosition = startPosition;
         lineData.geometry = geometry;
     }
     
     static void registerMousePositionCallback(GLFWwindow* window, std::weak_ptr<Shape> shape, std::weak_ptr<Shape> geometry) {
+        registerMousePositionCallback(window, shape.lock()->getPosition(), geometry);
+    }
+    
+    static void registerMousePositionCallback(GLFWwindow* window, std::weak_ptr<Shape> shape, std::weak_ptr<Shape> geometry, glm::vec3 normal) {
+        LineDrawer::normal = normal;
         registerMousePositionCallback(window, shape.lock()->getPosition(), geometry);
     }
     
@@ -107,7 +114,7 @@ public:
 };
 
 class MousePicker {
-    
+    friend LineDrawer;
 public:
     
     MousePicker(Renderer* renderer, Camera* camera, Scene* theScene, std::function<void(double,double)> clickCustomization, std::function<void(double,double)> rightClickCustomization = [](double x, double y){}) {
@@ -181,11 +188,6 @@ private:
     static std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> computeRayTriangleCollisions() {
         std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates;
         std::vector<std::shared_ptr<Shape>> sceneItems = theScene->get();
-        struct triangle {
-            triangle(glm::vec3 a, glm::vec3 b, glm::vec3 c) : a(a), b(b), c(c) {}
-            
-            glm::vec3 a,b,c;
-        };
         int i = 0;
         for (auto&& shape : sceneItems) {
             if (i > 0) {
@@ -195,37 +197,11 @@ private:
             constexpr float epsilon = std::numeric_limits<float>::epsilon();
             std::vector<glm::vec3> triangles = shape->getPositions();
             for (int i = 0; i < triangles.size(); i+=3) {
-                triangle triangle(triangles[i], triangles[i+1], triangles[i+2]);
-                glm::vec3 edge1 = triangle.b - triangle.a;
-                glm::vec3 edge2 = triangle.c - triangle.a;
-                glm::vec3 ray_cross_e2 = cross(ray.direction, edge2);
-                float det = dot(edge1, ray_cross_e2);
-
-                if (det > -epsilon && det < epsilon)
-                    continue;    // This ray is parallel to this triangle.
-
-                float inv_det = 1.0 / det;
-                glm::vec3 s = ray.origin - triangle.a;
-                float u = inv_det * dot(s, ray_cross_e2);
-
-                if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u-1) > epsilon))
-                    continue;
-
-                glm::vec3 s_cross_e1 = cross(s, edge1);
-                float v = inv_det * dot(ray.direction, s_cross_e1);
-
-                if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u + v - 1) > epsilon))
-                    continue;
-
-                // At this stage we can compute t to find out where the intersection point is on the line.
-                float t = inv_det * dot(edge2, s_cross_e1);
-
-                if (t > epsilon) // ray intersection
-                {
-                    candidates.push_back(std::make_tuple(shape, glm::vec3(ray.origin + ray.direction * t)));
+                Triangle triangle(triangles[i], triangles[i+1], triangles[i+2]);
+                auto result = vector::rayTriangleIntersection(ray, triangle);
+                for (auto res : result) {
+                    candidates.push_back(std::make_tuple(shape, res));
                 }
-                else // This means that there is a line intersection but not a ray intersection.
-                    continue;
             }
         }
         return candidates;

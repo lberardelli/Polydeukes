@@ -22,10 +22,53 @@ struct Ray {
     glm::vec3 origin;
     glm::vec3 direction;
 };
+
+struct Triangle {
+    Triangle(glm::vec3 a, glm::vec3 b, glm::vec3 c) : a(a), b(b), c(c) {}
+    
+    glm::vec3 a,b,c;
+};
     
 class vector {
   
 public:
+    
+    static std::vector<glm::vec3> rayTriangleIntersection(Ray ray, Triangle triangle) {
+        constexpr float epsilon = std::numeric_limits<float>::epsilon();
+        std::vector<glm::vec3> candidates{};
+        glm::vec3 edge1 = triangle.b - triangle.a;
+        glm::vec3 edge2 = triangle.c - triangle.a;
+        glm::vec3 ray_cross_e2 = cross(ray.direction, edge2);
+        float det = dot(edge1, ray_cross_e2);
+
+        if (det > -epsilon && det < epsilon)
+            return {};    // This ray is parallel to this triangle.
+
+        float inv_det = 1.0 / det;
+        glm::vec3 s = ray.origin - triangle.a;
+        float u = inv_det * dot(s, ray_cross_e2);
+
+        if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u-1) > epsilon))
+            return {};
+
+        glm::vec3 s_cross_e1 = cross(s, edge1);
+        float v = inv_det * dot(ray.direction, s_cross_e1);
+
+        if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u + v - 1) > epsilon))
+            return {};
+
+        // At this stage we can compute t to find out where the intersection point is on the line.
+        float t = inv_det * dot(edge2, s_cross_e1);
+
+        if (t > epsilon) // ray intersection
+        {
+            candidates.push_back(glm::vec3(ray.origin + ray.direction * t));
+        }
+        else // This means that there is a line intersection but not a ray intersection.
+            return {};
+        return candidates;
+    }
+    
     static glm::vec3 HalfAngleVector(glm::vec3& light, glm::vec3& eye) {
         return glm::normalize((glm::normalize(light) + glm::normalize(eye)) / 2.0f);
     }
@@ -51,7 +94,7 @@ public:
             glm::vec4(w, 0.0f),
             glm::vec4(t, 1.0f)
         );
-        glm::mat4 scaleTransform = homogeneousMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(deltaLength, 1.0f/5.f, 1.0f/5.f));
+        glm::mat4 scaleTransform = homogeneousMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(deltaLength,deltaLength/2, deltaLength/2));
         return glm::translate(glm::mat4(1.0f), (currentPosition - (glm::vec3(delta.x/2.f, delta.y/2.f, delta.z/2.0f)))) * scaleTransform;
     }
     

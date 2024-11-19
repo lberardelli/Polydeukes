@@ -248,7 +248,7 @@ public:
     SceneGraphNode(std::ifstream& sourceFileStream, std::string name, SceneGraphNode* parent = 0) : name(name), parent(parent) {
         std::string line{};
         data = SphereBuilder::getInstance()->build();
-        interGeometry = CubeBuilder().build();
+        interGeometry = SphereBuilder::getInstance()->build();
         while (std::getline(sourceFileStream, line)) {
             std::string delim = " ";
             std::string first = line.substr(0, line.find(delim));

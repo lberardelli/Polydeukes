@@ -350,7 +350,7 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
 void renderMotionCaptureScene(GLFWwindow* window) {
     ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
     program.init();
-    Camera camera(glm::vec3(0.,100.f,400.f), glm::vec3(0.f,100.f,0.f));
+    Camera camera(glm::vec3(0.,150.f,150.f), glm::vec3(0.f,10.f,0.f));
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     Arcball arcball = Arcball(&camera);
@@ -358,7 +358,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
         arcball.registerRotationCallback(window, mosPosx, mosPosy);
     });
     picker.enable(window);
-    std::string bvhFile = "/Users/lawrenceberardelli/Downloads/cmuconvert-daz-60-75/63/63_05.bvh";
+    std::string bvhFile = "/Users/lawrenceberardelli/Documents/bvh_sample_files/spinkick.bvh";
     std::shared_ptr<SceneGraph> graph(new SceneGraph(bvhFile));
     renderer.addMesh(std::dynamic_pointer_cast<Shape>(graph), &program);
     renderer.buildandrender(window, &camera, &theScene);
@@ -1266,7 +1266,7 @@ void chipEightInterpreter(GLFWwindow* window) {
         }
     }
     //load game into ram
-    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/snake.ch8", std::ios::binary);
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Sierpinski [Sergey Naydenov, 2010].ch8", std::ios::binary);
     if (!inputFile) {
         std::cerr << "Failed to open the file." << std::endl;
         return;
@@ -1342,11 +1342,68 @@ void riggingModule(GLFWwindow* window) {
     camera.enableFreeCameraMovement(window);
     picker.enableRayTrianglePicker(window);
     std::shared_ptr<Shape> shape = objInterpreter::interpretObjFile(objFile);
+    std::vector<std::shared_ptr<Shape>> bones{};
     shape->setOnClick([&](std::weak_ptr<Shape> theShape, glm::vec3 exactPosition) {
         auto fillcpy = lineFill->clone();
         fillcpy->setModelingTransform(glm::translate(glm::mat4(1.0f), exactPosition));
         renderer.addMesh(fillcpy);
         LineDrawer::registerMousePositionCallback(window, exactPosition, fillcpy);
+        bones.push_back(fillcpy);
+    });
+    shape->setOnMouseUp([&](std::weak_ptr<Shape> theShape) {
+        glm::vec3 endPosition = LineDrawer::lineData.endPosition;
+        glm::vec3 startPosition = LineDrawer::lineData.startPosition;
+        glm::vec3 direction = glm::normalize(endPosition - startPosition);
+        glm::vec3 arbitrary = (fabs(direction.x) > 0.1f) ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+        glm::vec3 u = glm::normalize(glm::cross(direction, arbitrary));
+        glm::vec3 v = glm::cross(direction, u);
+        struct RayShapePair {
+            Ray ray{};
+            std::shared_ptr<Shape> shape{};
+        };
+        for (int i = 0; i <= 3; ++i) {
+            glm::vec3 cur = startPosition * (float)(1 - (i)/(3.f)) + endPosition * ((float)(i)/3.f);
+            //shoot rays radially about this current position and intersect them with the triangle mesh.
+            std::vector<RayShapePair> rays{};
+            for (int i = 0; i < 100; ++i) {
+                float theta = (2.0f * glm::pi<float>() * i) / 100; // Angle in radians
+                glm::vec3 rayDirection = cos(theta) * u + sin(theta) * v;
+                Ray ray; ray.origin = cur; ray.direction = rayDirection;
+                auto line = CubeBuilder().build();
+                line->setModelingTransform(vector::scaleGeometryBetweenTwoPointsTransformation(ray.origin + ray.direction * 1.f, ray.origin));
+                renderer.addMesh(line);
+                RayShapePair pair; pair.ray = ray; pair.shape = line;
+                rays.push_back(pair); // Ray direction from the origin
+            }
+            std::vector<Triangle> candidates;
+            for (auto ray : rays) {
+                std::vector<glm::vec3> triangles = theShape.lock()->getPositions();
+                bool bAddedRay = false;
+                for (int i = 0; i < triangles.size(); i+=3) {
+                    Triangle triangle(triangles[i], triangles[i+1], triangles[i+2]);
+                    auto result = vector::rayTriangleIntersection(ray.ray, triangle);
+                    for (auto res : result) {
+                        if (std::find_if(candidates.begin(), candidates.end(), [&triangle](const Triangle& e){
+                            return triangle.a == e.a && triangle.b == e.b && triangle.c == e.c;
+                        }) == candidates.end()) {
+                            candidates.push_back(triangle);
+                            if (glm::length(res - ray.ray.origin) > 2.f) {
+                                continue;
+                            }
+                            ray.shape->setModelingTransform(vector::scaleGeometryBetweenTwoPointsTransformation(res, ray.ray.origin));
+                            ray.shape->setColour(glm::vec3(0.0f,1.0f,0.0f));
+                            bAddedRay = true;
+                        }
+                    }
+                }
+                if (!bAddedRay) {
+                    renderer.removeShape(ray.shape);
+                }
+            }
+            std::shared_ptr<Shape> meshoon = std::shared_ptr<ArbitraryShape>(new ArbitraryShape(candidates));
+            meshoon->setColour(glm::vec3(0.0f,1.0f,0.0f));
+            renderer.addMesh(meshoon);
+        }
     });
     renderer.addMesh(shape);
     renderer.buildandrender(window, &camera, &theScene);
@@ -1379,7 +1436,7 @@ int main(int argc, const char * argv[]) {
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL Version: " << version << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    riggingModule(window);
+    renderMotionCaptureScene(window);
 
     glfwTerminate();
     return 0;
