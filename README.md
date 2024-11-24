@@ -31,13 +31,13 @@ I'd like to beef up the obj file interpreter and make a rigging module for anima
 1. https://github.com/g-truc/glm/releases/tag/1.0.1
 
 ### Create the xcode project
-1. xcode -> new command line application
+1. xcode -> open existing project -> double click the xcode project in the top level directory of this repo. 
 
 ### Add downloaded assets to library and header search paths
-1. Add glm folder to both debug and build header search paths
-2. Add glfw include folder to both debug and build header search paths
-3. Add glad include folder to both debug and build header search paths
-4. Add glfw build/src/Debug folder to both debug and build library search paths
+1. Replace glm folder to both debug and build header search paths with your location
+2. Replace glfw include folder to both debug and build header search paths
+3. Replace glad include folder to both debug and build header search paths
+4. Replace glfw build/src/Debug folder to both debug and build library search paths
 
 ### Link libraries
 1. Navigate to build phases tab of xcode project settings
