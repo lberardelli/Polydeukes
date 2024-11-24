@@ -358,7 +358,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
         arcball.registerRotationCallback(window, mosPosx, mosPosy);
     });
     picker.enable(window);
-    std::string bvhFile = "/Users/lawrenceberardelli/Documents/bvh_sample_files/spinkick.bvh";
+    std::string bvhFile = "/Users/lawrenceberardelli/Documents/bvh_sample_files/jumpkick.bvh";
     std::shared_ptr<SceneGraph> graph(new SceneGraph(bvhFile));
     renderer.addMesh(std::dynamic_pointer_cast<Shape>(graph), &program);
     renderer.buildandrender(window, &camera, &theScene);
