@@ -516,7 +516,7 @@ LocationIndexPairs updateHermiteSpline(std::vector<HermiteControlPoint>& control
 }
 
 void renderBasicSplineStudy(GLFWwindow* window) {
-    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/Polydeukesshaders/fragmentshader.glsl");
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
     Scene theScene{};
@@ -694,14 +694,14 @@ void renderBasicSplineStudy(GLFWwindow* window) {
 
 void renderGPUSplineStudy(GLFWwindow* window) {
     ShaderProgram splineCurveProgram;
-    splineCurveProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinecurvetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziertes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinefs.glsl");
+    splineCurveProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinecurvetcs.glsl", getShaderDirectory() + "beziertes.glsl", getShaderDirectory() + "splinefs.glsl");
     ShaderProgram splineSurfaceProgram;
-    splineSurfaceProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinesurfacetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziersurfacetes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl",
-         "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughgs.glsl");
+    splineSurfaceProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinesurfacetcs.glsl", getShaderDirectory() + "beziersurfacetes.glsl", getShaderDirectory() + "fragmentshader.glsl",
+         getShaderDirectory() + "passthroughgs.glsl");
     ShaderProgram splineSurfaceNormalProgram;
-    splineSurfaceNormalProgram.createShaderProgram("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/passthroughvs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/splinesurfacetcs.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/beziersurfacetes.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/lightsourceshader.glsl",
-         "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/addnormalgs.glsl");
-    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    splineSurfaceNormalProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinesurfacetcs.glsl", getShaderDirectory() + "beziersurfacetes.glsl", getShaderDirectory() + "lightsourceshader.glsl",
+         getShaderDirectory() + "addnormalgs.glsl");
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
     camera.enableFreeCameraMovement(window);
@@ -1212,7 +1212,7 @@ bool Chip8InputHandler::is_key_pressed[16] = {
 };
 
 void chipEightInterpreter(GLFWwindow* window) {
-    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/chip8fragmentshader.glsl");
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "chip8fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
     Scene theScene{};
@@ -1315,7 +1315,7 @@ std::vector<int> parseFaceLine(std::string delim, std::string line) {
 
 void objFileInterpeter(GLFWwindow* window) {
     std::string objFile = "/Users/lawrenceberardelli/Downloads/hand.obj";
-    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
     Arcball arcball(&camera);
@@ -1334,7 +1334,7 @@ void objFileInterpeter(GLFWwindow* window) {
 
 void riggingModule(GLFWwindow* window) {
     std::string objFile = "/Users/lawrenceberardelli/Downloads/hand.obj";
-    ShaderProgram program("/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/vertexshader.glsl", "/Users/lawrenceberardelli/Documents/coding/c++/learnopengl/Polydeukes/Polydeukes/shaders/fragmentshader.glsl");
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
     Arcball arcball(&camera);

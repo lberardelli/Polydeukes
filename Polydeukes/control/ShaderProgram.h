@@ -77,12 +77,12 @@ public:
         return shader;
     }
     
-    void createShaderProgram(const char* vertexPath, const char* tessControlPath,
-                               const char* tessEvalPath, const char* fragmentPath) {
-        GLuint vertexShader = loadShader(vertexPath, GL_VERTEX_SHADER);
-        GLuint tessControlShader = loadShader(tessControlPath, GL_TESS_CONTROL_SHADER);
-        GLuint tessEvalShader = loadShader(tessEvalPath, GL_TESS_EVALUATION_SHADER);
-        GLuint fragmentShader = loadShader(fragmentPath, GL_FRAGMENT_SHADER);
+    void createShaderProgram(std::string vertexPath, std::string tessControlPath,
+                             std::string tessEvalPath, std::string fragmentPath) {
+        GLuint vertexShader = loadShader(vertexPath.c_str(), GL_VERTEX_SHADER);
+        GLuint tessControlShader = loadShader(tessControlPath.c_str(), GL_TESS_CONTROL_SHADER);
+        GLuint tessEvalShader = loadShader(tessEvalPath.c_str(), GL_TESS_EVALUATION_SHADER);
+        GLuint fragmentShader = loadShader(fragmentPath.c_str(), GL_FRAGMENT_SHADER);
 
         GLuint shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram, vertexShader);
@@ -109,13 +109,13 @@ public:
         pid = shaderProgram;
     }
     
-    void createShaderProgram(const char* vertexPath, const char* tessControlPath,
-                               const char* tessEvalPath, const char* fragmentPath, const char* geometryPath) {
-        GLuint vertexShader = loadShader(vertexPath, GL_VERTEX_SHADER);
-        GLuint tessControlShader = loadShader(tessControlPath, GL_TESS_CONTROL_SHADER);
-        GLuint tessEvalShader = loadShader(tessEvalPath, GL_TESS_EVALUATION_SHADER);
-        GLuint fragmentShader = loadShader(fragmentPath, GL_FRAGMENT_SHADER);
-        GLuint geometryShader = loadShader(geometryPath, GL_GEOMETRY_SHADER);
+    void createShaderProgram(std::string vertexPath, std::string tessControlPath,
+                             std::string tessEvalPath, std::string fragmentPath, std::string geometryPath) {
+        GLuint vertexShader = loadShader(vertexPath.c_str(), GL_VERTEX_SHADER);
+        GLuint tessControlShader = loadShader(tessControlPath.c_str(), GL_TESS_CONTROL_SHADER);
+        GLuint tessEvalShader = loadShader(tessEvalPath.c_str(), GL_TESS_EVALUATION_SHADER);
+        GLuint fragmentShader = loadShader(fragmentPath.c_str(), GL_FRAGMENT_SHADER);
+        GLuint geometryShader = loadShader(geometryPath.c_str(), GL_GEOMETRY_SHADER);
 
         GLuint shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram, vertexShader);
