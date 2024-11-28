@@ -17,7 +17,7 @@ I'd like to beef up the obj file interpreter and make a rigging module for anima
 ## Build Instructions
 
 ### Download glad
-1. /Users/lawrenceberardelli/Downloads/glm-1.0.1/glm
+1. https://glad.dav1d.de/
 2. Core mode
 3. Generate a loader checked
 4. Language C/C++
