@@ -12,12 +12,12 @@ Polydeukes includes the following modules
 6. A very basic obj file interpreter
 
 ### Future
-I'd like to beef up the obj file interpreter and make a rigging module for animations. Also, each of the existing modules can also be improved mostly by adding user facing tooling. For example, the chip8 interpret doesn't allow you to switch the game you're playing without restarting the app and hard coding it. Also, keeping the user "on the rails" doesn't exist and lots of activites cause crashing. For example if you try to render a quadric or higher interpolation curve, we crash. 
+I'd like to beef up the obj file interpreter and make a rigging module for animations. Also, each of the existing modules can be improved by adding user facing tooling. For example, the chip8 interpret doesn't allow you to switch the game you're playing without restarting the app and hard coding it. Keeping the user "on the rails" doesn't exist and lots of activites cause crashing: if you try to render a quadric or higher interpolation curve, we crash. 
 
 ## Build Instructions
 
 ### Download glad
-1. /Users/lawrenceberardelli/Downloads/glm-1.0.1/glm
+1. https://glad.dav1d.de/
 2. Core mode
 3. Generate a loader checked
 4. Language C/C++
