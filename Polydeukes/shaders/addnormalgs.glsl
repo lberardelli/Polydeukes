@@ -36,6 +36,4 @@ void main() {
     GenerateLine(0);
     GenerateLine(1);
     GenerateLine(2);
-    
-
 }

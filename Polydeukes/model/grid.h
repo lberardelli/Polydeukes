@@ -31,7 +31,7 @@ public:
         float horizontalDelta = (fovTopRight.x - fovbottomLeft.x)/(float)nVertical;
         float verticalDelta = (fovTopRight.y - fovbottomLeft.y)/(float)nHorizontal;
         colour = glm::vec3(1.0f,1.0f,1.0f);
-        for (int i = 0; i < nHorizontal; ++i) {
+        for (int i = 0; i < nHorizontal + 1; ++i) {
             Line line(glm::vec3(fovbottomLeft.x, fovTopRight.y - verticalDelta * i, 0.f), glm::vec3(fovTopRight.x, fovTopRight.y - verticalDelta * i, 0.f));
             vertices.push_back(line.top.x);
             vertices.push_back(line.top.y);
@@ -40,7 +40,7 @@ public:
             vertices.push_back(line.bottom.y);
             vertices.push_back(line.bottom.z);
         }
-        for (int i = 0; i < nVertical; ++i) {
+        for (int i = 0; i < nVertical + 1; ++i) {
             Line line(glm::vec3(fovbottomLeft.x + horizontalDelta * i, fovTopRight.y, 0.0f), glm::vec3(fovbottomLeft.x + horizontalDelta * i, fovbottomLeft.y, 0.0f));
             vertices.push_back(line.top.x);
             vertices.push_back(line.top.y);

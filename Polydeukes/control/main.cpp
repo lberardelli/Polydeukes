@@ -698,6 +698,104 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+// Evaluate a cubic Bezier component at a given parameter u
+float bezierComponent(float P0, float P1, float P2, float P3, float u) {
+    float oneMinusU = 1.0f - u;
+    return oneMinusU * oneMinusU * oneMinusU * P0 +
+           3 * oneMinusU * oneMinusU * u * P1 +
+           3 * oneMinusU * u * u * P2 +
+           u * u * u * P3;
+}
+
+// Solve cubic equation using a robust numerical approach
+std::vector<float> solveCubic(float a3, float a2, float a1, float a0) {
+    std::vector<float> roots;
+
+    // If the leading coefficient is zero, reduce to a quadratic equation
+    if (std::abs(a3) < 1e-6) {
+        if (std::abs(a2) < 1e-6) {
+            if (std::abs(a1) < 1e-6) {
+                return roots; // No solution
+            }
+            // Linear equation: a1 * u + a0 = 0
+            roots.push_back(-a0 / a1);
+        } else {
+            // Quadratic equation: a2 * u^2 + a1 * u + a0 = 0
+            float discriminant = a1 * a1 - 4 * a2 * a0;
+            if (discriminant >= 0) {
+                roots.push_back((-a1 + std::sqrt(discriminant)) / (2 * a2));
+                roots.push_back((-a1 - std::sqrt(discriminant)) / (2 * a2));
+            }
+        }
+    } else {
+        // Use Cardano's method for cubic roots (robust numerical implementation omitted here)
+        // Placeholder for a full cubic solver like Eigen or specialized libraries
+        const int maxIterations = 100;
+        const float tolerance = 1e-6;
+
+        for (float guess = 0.0f; guess <= 1.0f; guess += 0.1f) {
+            float u = guess;
+            for (int iter = 0; iter < maxIterations; ++iter) {
+                float f = a3 * u * u * u + a2 * u * u + a1 * u + a0;
+                float df = 3 * a3 * u * u + 2 * a2 * u + a1;
+
+                if (std::abs(df) < tolerance) break; // Avoid division by zero
+                float nextU = u - f / df;
+                if (std::abs(nextU - u) < tolerance) {
+                    u = nextU;
+                    break;
+                }
+                u = nextU;
+            }
+
+            if (u >= 0.0f && u <= 1.0f) {
+                roots.push_back(u);
+            }
+        }
+    }
+
+    // Deduplicate roots within numerical tolerance
+    std::sort(roots.begin(), roots.end());
+    roots.erase(std::unique(roots.begin(), roots.end(), [&](float a, float b) {
+        return std::abs(a - b) < 1e-6;
+    }), roots.end());
+
+    return roots;
+}
+
+// Find ray-curve intersections
+std::vector<std::pair<float, float>> findIntersections(std::vector<glm::vec3> P, float yRay) {
+    // Compute cubic coefficients for y(u) - yRay = 0
+    float a3 = P[3].y - 3 * P[2].y + 3 * P[1].y - P[0].y;
+    float a2 = 3 * (P[2].y - 2 * P[1].y + P[0].y);
+    float a1 = 3 * (P[1].y - P[0].y);
+    float a0 = P[0].y - yRay;
+
+    // Solve for u
+    std::vector<float> uRoots = solveCubic(a3, a2, a1, a0);
+
+    // Compute (t, u) pairs
+    std::vector<std::pair<float, float>> intersections;
+    for (float u : uRoots) {
+        if (u >= 0.0f && u <= 1.0f) {
+            float x = bezierComponent(P[0].x, P[1].x, P[2].x, P[3].x, u);
+            intersections.emplace_back(x, u);
+        }
+    }
+
+    // Deduplicate intersections by x-coordinate
+    const float tolerance = 1e-6;
+    std::sort(intersections.begin(), intersections.end(), [](const auto& a, const auto& b) {
+        return a.first < b.first;
+    });
+    intersections.erase(std::unique(intersections.begin(), intersections.end(), [&](const auto& a, const auto& b) {
+        return std::abs(a.first - b.first) < tolerance;
+    }), intersections.end());
+
+    return intersections;
+}
+
+
 void renderGPUSplineStudy(GLFWwindow* window) {
     ShaderProgram splineCurveProgram;
     splineCurveProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinecurvetcs.glsl", getShaderDirectory() + "beziertes.glsl", getShaderDirectory() + "splinefs.glsl");
@@ -929,6 +1027,49 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             }
         }
         bHidden = !bHidden;
+    }).build());
+    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+        //evaluate the curve
+        std::vector<std::vector<glm::vec3>> curves{};
+        for (int i = 0; i < controlPoints.size() - 3; i+=4) {
+            std::vector<std::shared_ptr<Shape>> thisCurve{controlPoints[i], controlPoints[i+1], controlPoints[i+2], controlPoints[i+3]};
+            std::vector<glm::vec3> curve = computeBezierCurve(thisCurve);
+            curves.push_back(curve);
+        }
+        //need the highest point and the lowest point
+        float highestPoint = -100.f;
+        float lowestPoint = 100.f;
+        float leftMostPoint = 100.f;
+        for (auto curve : curves) {
+            for (auto point : curve) {
+                if (point.y > highestPoint) {
+                    highestPoint = point.y;
+                }
+                if (point.y < lowestPoint) {
+                    lowestPoint = point.y;
+                }
+                if (point.x < leftMostPoint) {
+                    leftMostPoint = point.x;
+                }
+            }
+        }
+        //starting from the highest to the lowest points, project rays through the glyph and collect interior intervals.
+        for (float y = highestPoint; y >= lowestPoint; y -= 0.01f) {
+            Ray ray;
+            ray.origin = glm::vec3(leftMostPoint-10.f, y, 0.0f);
+            ray.direction = glm::vec3(1.0f,0.0f,0.0f);
+            for (int i = 0; i < controlPoints.size() - 3; i+=4) {
+                std::vector<glm::vec3> thisCurve{controlPoints[i].get()->getPosition(), controlPoints[i+1].get()->getPosition(), controlPoints[i+2].get()->getPosition(), controlPoints[i+3].get()->getPosition()};
+                auto intersections = findIntersections(thisCurve, y);
+                for (const auto& [x, u] : intersections) {
+                    auto cube = CubeBuilder().build();
+                    cube->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
+                    cube->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(x,y,0.f)));
+                    
+                    renderer.addMesh(cube);
+                }
+            }
+        }
     }).build());
     picker.enable(window);
     MeshDragger::camera = &camera;
