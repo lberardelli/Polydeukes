@@ -10,8 +10,8 @@
 
 #include "shape.h"
 #include <glad/glad.h>
-#include "../control/ShaderProgram.h"
-#include "../control/vector.h"
+#include "ShaderProgram.h"
+#include "../model/vector.h"
 
 #include <memory>
 

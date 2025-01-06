@@ -5,15 +5,16 @@
 //  Created by Lawrence Berardelli on 2023-11-04.
 //
 
+#define GLFW_INCLUDE_NONE
+
 #include <iostream>
 #include <filesystem>
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include "sierpinski.h"
 #include "texture.h"
 #include "cube.h"
-#include "ShaderProgram.h"
+#include "../model/ShaderProgram.h"
 #include "../view/renderer.h"
 #include "MeshSpawner.h"
 #include "MousePicker.h"
@@ -26,6 +27,7 @@
 #include "../model/axies.h"
 #include "../model/spline.h"
 #include "../model/objinterpreter.h"
+#include "../model/grid.h"
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -300,6 +302,9 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
     tmp3.push_back(std::move(otherGraph));
     tmp3.push_back(std::move(subGraph));
     springEndSprite->addShapes(std::move(tmp3));
+    springEndSprite->setOnClick([&](std::weak_ptr<Shape> theShape) {
+        MeshDragger::registerMousePositionCallback(window, theShape);
+    });
     springEndSprite->setPosition(glm::vec3(10.0f,20.0f,0.0f));
     glm::vec3 lookat = springEndSprite->getPosition() - spring.getFixedPosition();
     std::shared_ptr<Shape> square = SquareBuilder().build();
@@ -346,11 +351,12 @@ void renderBasicPhysicsPlayground(GLFWwindow* window) {
     renderer.addParticle(Particle(eastWall, 0),&gridProgram);
     renderer.addParticle(Particle(westWall, 0),&gridProgram);
     
-    Particle pellet(SphereBuilder::getInstance()->build(), 0.10);
+    Particle pellet(SphereBuilder::getInstance()->withOnClickCallback([&](std::weak_ptr<Shape> targetShape) {
+        MeshDragger::registerMousePositionCallback(window, targetShape);
+    }).build(), 0.10);
     pellet.addTensor(&Gravity::update);
     pellet.addTensor(std::bind(&Drag::update, &drag, std::placeholders::_1, std::placeholders::_2));
     renderer.addParticle(pellet);
-    renderer.addMesh(CubeBuilder().build());
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -708,6 +714,9 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     Arcball arcball(&camera);
+    std::vector<glm::vec3> corners = camera.fovThroughOrigin();
+    auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], 20, 20));
+    renderer.addMesh(grid);
     std::vector<std::shared_ptr<Shape>> controlPoints{};
     std::vector<HermiteControlPoint> hermiteControlPoints{};
     struct SplineShapeRelation {
@@ -724,11 +733,14 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
         std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
-        controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.5f,.5f,.5f)));
+        controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
         controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), position));
         controlPoints.push_back(controlPoint);
         controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
             MeshDragger::registerMousePositionCallback(window, targetShape);
+        });
+        controlPoint->setOnRightClick([&](std::weak_ptr<Shape> targetShape) {
+            controlPoints.push_back(targetShape.lock());
         });
         renderer.addMesh(controlPoint);
     }, [&arcball, window](double x, double y) {
@@ -742,6 +754,9 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         std::shared_ptr<Shape> spline = std::shared_ptr<SplineCurve>(new SplineCurve(controlPoints[nCurveClicks * 4]->getPosition(), controlPoints[nCurveClicks*4 + 1]->getPosition(), controlPoints[nCurveClicks * 4 + 2]->getPosition(), controlPoints[nCurveClicks * 4 + 3]->getPosition()));
         splineContainer.splines.push_back(spline);
         for (int i = 0; i < 4; ++i) {
+            if (i == 1 || i == 2) {
+                controlPoints[nCurveClicks * 4 + i]->setColour(glm::vec3(1.0f,0.0f,0.f));
+            }
             splineContainer.controlPoints.push_back(controlPoints[nCurveClicks * 4 + i]);
         }
         ++nCurveClicks;
@@ -760,136 +775,146 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
     bool bHidden = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
-        splineSurfaceContainer.controlPoints = controlPoints;
-        std::vector<glm::vec3> locations{};
-        for (auto shape : controlPoints) {
-            locations.push_back(shape->getPosition());
-        }
-        std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
-        splineSurfaceContainer.splines.push_back(splineSurface);
-        for (auto controlPoint : controlPoints) {
-            controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
-                for (int j = 0; j < splineSurfaceContainer.splines.size(); ++j) {
-                    for (int i = 0; i < 16; ++i) {
-                        if (splineSurfaceContainer.controlPoints[j * 16 + i].get() == targetShape.lock().get()) {
-                            std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[j])->updateLocation(i, targetShape.lock()->getPosition());
-                        }
-                    }
-                }
-            });
-        }
-        renderer.addMesh(splineSurface, &splineSurfaceProgram);
+        //the spline surface interpolator
+//        splineSurfaceContainer.controlPoints = controlPoints;
+//        std::vector<glm::vec3> locations{};
+//        for (auto shape : controlPoints) {
+//            locations.push_back(shape->getPosition());
+//        }
+//        std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
+//        splineSurfaceContainer.splines.push_back(splineSurface);
+//        for (auto controlPoint : controlPoints) {
+//            controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
+//                for (int j = 0; j < splineSurfaceContainer.splines.size(); ++j) {
+//                    for (int i = 0; i < 16; ++i) {
+//                        if (splineSurfaceContainer.controlPoints[j * 16 + i].get() == targetShape.lock().get()) {
+//                            std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[j])->updateLocation(i, targetShape.lock()->getPosition());
+//                        }
+//                    }
+//                }
+//            });
+//        }
+//        renderer.addMesh(splineSurface, &splineSurfaceProgram);
 //        renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
+        arcball.resetArcball();
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
     bool bAlreadyClicked = false;
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
-        if (bAlreadyClicked) {
-            return;
-        }
-        //read in bpt file
-        std::string line;
-        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teapot.bpt");
-        int nSurfaces = 0;
-        if (myfile.is_open())
-        {
-            std::getline(myfile,line);
-            nSurfaces = std::stoi(line);
-            for (int i = 0; i < nSurfaces; ++i) {
-                //skip the first line
-                std::getline(myfile,line);
-                for (int j = 0; j < 16; ++j) {
-                    std::getline(myfile, line);
-                    std::istringstream iss(line);
-                    std::vector<float> position{};
-                    std::string coordinate{};
-                    while (iss >> coordinate) {
-                        position.push_back(std::stof(coordinate));
-                    }
-                    std::shared_ptr<Shape> controlPoint = CubeBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
-                    controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
-                    controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(position[0], position[1], position[2])));
-                    controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
-                        MeshDragger::registerMousePositionCallback(window, targetShape);
-                    });
-                    controlPoints.push_back(controlPoint);
-                    splineSurfaceContainer.controlPoints.push_back(controlPoint);
-                }
-                std::vector<glm::vec3> locations{};
-                for (int j = i * 16; j < i*16 + 16; ++j) {
-                    locations.push_back(controlPoints[j]->getPosition());
-                }
-                std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
-                splineSurface->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
-                splineSurfaceContainer.splines.push_back(splineSurface);
-            }
-            myfile.close();
-            int tick = 0;
-            std::vector<glm::vec3> startPositions{};
-            for (auto controlPoint : controlPoints) {
-                startPositions.push_back(controlPoint->getPosition());
-            }
-            int delay = 0;
-            bool bGoingUp = true;
-            auto foldUnfoldAnimation = [&bHidden, bGoingUp, delay, tick, startPositions, &splineSurfaceContainer, &controlPoints]() mutable {
-                // linearly interpolate between current position and some plane
-                //in chunks of 16 control points linearly interpolate between -x and x
-                ++delay;
-                if (delay < 100) {
-                    return;
-                }
-                float left_surface = -1.f * (float)splineSurfaceContainer.splines.size() / 5.f;
-                //need the size of the surface, say 8 for now.
-                for (int i = 0; i < splineSurfaceContainer.splines.size(); ++i) {
-                    for (int j = 16 * i; j < 16 + 16 * i; ++j) {
-                        glm::vec3 targetPosition = glm::vec3(left_surface + (i * .4), -2.f + (j % 4), -2.0f + ((j % 16) / 4));
-                        glm::vec3 startPosition = startPositions[j];
-                        glm::vec3 newPosition = startPosition * (1-((float)tick/500.f)) + targetPosition * ((float)tick/500.f);
-                        std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[i])->updateLocation(j % 16, newPosition);
-                        if (!bHidden) {
-                            controlPoints[j]->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1,.1,.1)));
-                            controlPoints[j]->updateModellingTransform(glm::translate(glm::mat4(1.0f), newPosition));
-                        }
-                    }
-                }
-                if (bGoingUp) {
-                    if (tick < 100) {
-                        ++tick;
-                    }
-                    else {
-                        bGoingUp = false;
-                    }
-                }
-                else {
-                    if (tick > 0) {
-                        --tick;
-                    }
-                    else {
-                        bGoingUp = true;
-                        delay = -100;
-                    }
-                }
-            };
-            //renderer.addPreRenderCustomization(foldUnfoldAnimation);
-        }
-        else {
-            std::cerr << "Error opening file: " << std::strerror(errno) << std::endl;
-            return;
-        }
-        bAlreadyClicked = true;
-        std::shared_ptr<Shape> bundle = std::shared_ptr<SplineSurfaceBundle>(new SplineSurfaceBundle(splineSurfaceContainer.splines));
-        renderer.addMesh(bundle, &splineSurfaceProgram);
-        //renderer.addMesh(bundle->clone(), &splineSurfaceNormalProgram);
-        for (auto controlPoint : controlPoints) {
-            renderer.addMesh(controlPoint);
-            controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
-                for (int j = 0; j < splineSurfaceContainer.splines.size(); ++j) {
-                    for (int i = 0; i < 16; ++i) {
-                        if (splineSurfaceContainer.controlPoints[j * 16 + i].get() == targetShape.lock().get()) {
-                            std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[j])->updateLocation(i, targetShape.lock()->getPosition());
-                        }
-                    }
-                }
-            });
+        //the bpt file interpreter.
+//        if (bAlreadyClicked) {
+//            return;
+//        }
+//        //read in bpt file
+//        std::string line;
+//        std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teapot.bpt");
+//        int nSurfaces = 0;
+//        if (myfile.is_open())
+//        {
+//            std::getline(myfile,line);
+//            nSurfaces = std::stoi(line);
+//            for (int i = 0; i < nSurfaces; ++i) {
+//                //skip the first line
+//                std::getline(myfile,line);
+//                for (int j = 0; j < 16; ++j) {
+//                    std::getline(myfile, line);
+//                    std::istringstream iss(line);
+//                    std::vector<float> position{};
+//                    std::string coordinate{};
+//                    while (iss >> coordinate) {
+//                        position.push_back(std::stof(coordinate));
+//                    }
+//                    std::shared_ptr<Shape> controlPoint = CubeBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+//                    controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
+//                    controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(position[0], position[1], position[2])));
+//                    controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
+//                        MeshDragger::registerMousePositionCallback(window, targetShape);
+//                    });
+//                    controlPoints.push_back(controlPoint);
+//                    splineSurfaceContainer.controlPoints.push_back(controlPoint);
+//                }
+//                std::vector<glm::vec3> locations{};
+//                for (int j = i * 16; j < i*16 + 16; ++j) {
+//                    locations.push_back(controlPoints[j]->getPosition());
+//                }
+//                std::shared_ptr<Shape> splineSurface = std::shared_ptr<Shape>(new SplineSurface(locations));
+//                splineSurface->setColour(glm::vec3(1.0f, 1.0f, 1.0f));
+//                splineSurfaceContainer.splines.push_back(splineSurface);
+//            }
+//            myfile.close();
+//            int tick = 0;
+//            std::vector<glm::vec3> startPositions{};
+//            for (auto controlPoint : controlPoints) {
+//                startPositions.push_back(controlPoint->getPosition());
+//            }
+//            int delay = 0;
+//            bool bGoingUp = true;
+//            auto foldUnfoldAnimation = [&bHidden, bGoingUp, delay, tick, startPositions, &splineSurfaceContainer, &controlPoints]() mutable {
+//                // linearly interpolate between current position and some plane
+//                //in chunks of 16 control points linearly interpolate between -x and x
+//                ++delay;
+//                if (delay < 100) {
+//                    return;
+//                }
+//                float left_surface = -1.f * (float)splineSurfaceContainer.splines.size() / 5.f;
+//                //need the size of the surface, say 8 for now.
+//                for (int i = 0; i < splineSurfaceContainer.splines.size(); ++i) {
+//                    for (int j = 16 * i; j < 16 + 16 * i; ++j) {
+//                        glm::vec3 targetPosition = glm::vec3(left_surface + (i * .4), -2.f + (j % 4), -2.0f + ((j % 16) / 4));
+//                        glm::vec3 startPosition = startPositions[j];
+//                        glm::vec3 newPosition = startPosition * (1-((float)tick/500.f)) + targetPosition * ((float)tick/500.f);
+//                        std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[i])->updateLocation(j % 16, newPosition);
+//                        if (!bHidden) {
+//                            controlPoints[j]->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1,.1,.1)));
+//                            controlPoints[j]->updateModellingTransform(glm::translate(glm::mat4(1.0f), newPosition));
+//                        }
+//                    }
+//                }
+//                if (bGoingUp) {
+//                    if (tick < 100) {
+//                        ++tick;
+//                    }
+//                    else {
+//                        bGoingUp = false;
+//                    }
+//                }
+//                else {
+//                    if (tick > 0) {
+//                        --tick;
+//                    }
+//                    else {
+//                        bGoingUp = true;
+//                        delay = -100;
+//                    }
+//                }
+//            };
+//            //renderer.addPreRenderCustomization(foldUnfoldAnimation);
+//        }
+//        else {
+//            std::cerr << "Error opening file: " << std::strerror(errno) << std::endl;
+//            return;
+//        }
+//        bAlreadyClicked = true;
+//        std::shared_ptr<Shape> bundle = std::shared_ptr<SplineSurfaceBundle>(new SplineSurfaceBundle(splineSurfaceContainer.splines));
+//        renderer.addMesh(bundle, &splineSurfaceProgram);
+//        //renderer.addMesh(bundle->clone(), &splineSurfaceNormalProgram);
+//        for (auto controlPoint : controlPoints) {
+//            renderer.addMesh(controlPoint);
+//            controlPoint->setOnMouseDrag([&](std::weak_ptr<Shape> targetShape) {
+//                for (int j = 0; j < splineSurfaceContainer.splines.size(); ++j) {
+//                    for (int i = 0; i < 16; ++i) {
+//                        if (splineSurfaceContainer.controlPoints[j * 16 + i].get() == targetShape.lock().get()) {
+//                            std::dynamic_pointer_cast<SplineSurface>(splineSurfaceContainer.splines[j])->updateLocation(i, targetShape.lock()->getPosition());
+//                        }
+//                    }
+//                }
+//            });
+//        }
+        if (!bAlreadyClicked) {
+            renderer.removeShape(grid);
+            bAlreadyClicked = true;
+        } else {
+            bAlreadyClicked = false;
+            renderer.addMesh(grid);
         }
     }).withColour(glm::vec3(0.212,0.329,.369)).build());
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
@@ -1445,7 +1470,7 @@ int main(int argc, const char * argv[]) {
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     std::string fullPath = __FILE__; // Absolute path of this source file
     std::cout << fullPath.substr(0, fullPath.find_last_of("/")) << std::endl;
-    renderMotionCaptureScene(window);
+    renderGPUSplineStudy(window);
 
     glfwTerminate();
     return 0;

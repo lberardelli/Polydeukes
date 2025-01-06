@@ -9,7 +9,7 @@
 #define spline_h
 
 #include "shape.h"
-#include "../control/ShaderProgram.h"
+#include "ShaderProgram.h"
 #include <memory>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -103,7 +103,7 @@ public:
     virtual void render(ShaderProgram shaderProgram) {
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
-        shaderProgram.setInt("TessLevel", 50);
+        shaderProgram.setInt("TessLevel", 5);
         glBindVertexArray(VAO);
         glPatchParameteri(GL_PATCH_VERTICES, 16);
         glDrawArrays(GL_PATCHES, 0, 16);

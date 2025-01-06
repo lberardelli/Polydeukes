@@ -10,7 +10,6 @@
 		A02D58912CF3A15F00916308 /* libglfw3.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A02D58902CF3A12400916308 /* libglfw3.a */; };
 		A02D58CE2CF3A18600916308 /* glad.c in Sources */ = {isa = PBXBuildFile; fileRef = A02D58922CF3A18600916308 /* glad.c */; };
 		A02D58CF2CF3A18600916308 /* Arcball.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D589A2CF3A18600916308 /* Arcball.cpp */; };
-		A02D58D02CF3A18600916308 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D589C2CF3A18600916308 /* main.cpp */; };
 		A02D58D12CF3A18600916308 /* MeshSpawner.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D589D2CF3A18600916308 /* MeshSpawner.cpp */; };
 		A02D58D22CF3A18600916308 /* MousePicker.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D58A02CF3A18600916308 /* MousePicker.cpp */; };
 		A02D58D32CF3A18600916308 /* renderer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D58A62CF3A18600916308 /* renderer.cpp */; };
@@ -18,6 +17,10 @@
 		A02D58D52CF3A18600916308 /* cube.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D58AD2CF3A18600916308 /* cube.cpp */; };
 		A02D58D62CF3A18600916308 /* sphere.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D58B52CF3A18600916308 /* sphere.cpp */; };
 		A02D58D72CF3A18600916308 /* square.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D58B82CF3A18600916308 /* square.cpp */; };
+		A03F29762D10A8CA00AD27D2 /* Kastor.hpp in Headers */ = {isa = PBXBuildFile; fileRef = A03F29752D10A8CA00AD27D2 /* Kastor.hpp */; };
+		A03F29782D10A8CA00AD27D2 /* KastorPriv.hpp in Headers */ = {isa = PBXBuildFile; fileRef = A03F29772D10A8CA00AD27D2 /* KastorPriv.hpp */; };
+		A03F297A2D10A8CA00AD27D2 /* Kastor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A03F29792D10A8CA00AD27D2 /* Kastor.cpp */; };
+		A03F297E2D10B33100AD27D2 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A02D589C2CF3A18600916308 /* main.cpp */; };
 		A06902472AF7433800766C7A /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A06902462AF7433800766C7A /* Cocoa.framework */; };
 		A06902492AF7434600766C7A /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A06902482AF7434600766C7A /* OpenGL.framework */; };
 		A069024B2AF7435100766C7A /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A069024A2AF7435100766C7A /* IOKit.framework */; };
@@ -36,6 +39,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A00027482D2ADBA3000246C7 /* grid.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = grid.h; sourceTree = "<group>"; };
 		A02D58902CF3A12400916308 /* libglfw3.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libglfw3.a; path = "../../../../../../Downloads/glfw-3.4/build/src/Debug/libglfw3.a"; sourceTree = "<group>"; };
 		A02D58922CF3A18600916308 /* glad.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = glad.c; sourceTree = "<group>"; };
 		A02D58932CF3A18600916308 /* stb_image.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = stb_image.h; sourceTree = "<group>"; };
@@ -91,6 +95,10 @@
 		A02D58CA2CF3A18600916308 /* splinefs.glsl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = splinefs.glsl; sourceTree = "<group>"; };
 		A02D58CB2CF3A18600916308 /* splinesurfacetcs.glsl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = splinesurfacetcs.glsl; sourceTree = "<group>"; };
 		A02D58CC2CF3A18600916308 /* vertexshader.glsl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = vertexshader.glsl; sourceTree = "<group>"; };
+		A03F29732D10A8CA00AD27D2 /* libKastor.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = libKastor.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		A03F29752D10A8CA00AD27D2 /* Kastor.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Kastor.hpp; sourceTree = "<group>"; };
+		A03F29772D10A8CA00AD27D2 /* KastorPriv.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = KastorPriv.hpp; sourceTree = "<group>"; };
+		A03F29792D10A8CA00AD27D2 /* Kastor.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = Kastor.cpp; sourceTree = "<group>"; };
 		A06902262AF73BB400766C7A /* Polydeukes */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Polydeukes; sourceTree = BUILT_PRODUCTS_DIR; };
 		A06902462AF7433800766C7A /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		A06902482AF7434600766C7A /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
@@ -98,6 +106,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A03F29712D10A8CA00AD27D2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A06902232AF73BB400766C7A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -143,9 +158,7 @@
 				A02D589F2CF3A18600916308 /* MouseController.h */,
 				A02D58A02CF3A18600916308 /* MousePicker.cpp */,
 				A02D58A12CF3A18600916308 /* MousePicker.h */,
-				A02D58A22CF3A18600916308 /* ShaderProgram.h */,
 				A02D58A32CF3A18600916308 /* sierpinski.h */,
-				A02D58A42CF3A18600916308 /* vector.h */,
 			);
 			path = control;
 			sourceTree = "<group>";
@@ -162,6 +175,8 @@
 		A02D58BB2CF3A18600916308 /* model */ = {
 			isa = PBXGroup;
 			children = (
+				A02D58A42CF3A18600916308 /* vector.h */,
+				A02D58A22CF3A18600916308 /* ShaderProgram.h */,
 				A02D58A92CF3A18600916308 /* axies.cpp */,
 				A02D58AA2CF3A18600916308 /* axies.h */,
 				A02D58AB2CF3A18600916308 /* Camera.h */,
@@ -180,6 +195,7 @@
 				A02D58B82CF3A18600916308 /* square.cpp */,
 				A02D58B92CF3A18600916308 /* square.h */,
 				A02D58BA2CF3A18600916308 /* texture.h */,
+				A00027482D2ADBA3000246C7 /* grid.h */,
 			);
 			path = model;
 			sourceTree = "<group>";
@@ -208,10 +224,21 @@
 			path = shaders;
 			sourceTree = "<group>";
 		};
+		A03F29742D10A8CA00AD27D2 /* Kastor */ = {
+			isa = PBXGroup;
+			children = (
+				A03F29752D10A8CA00AD27D2 /* Kastor.hpp */,
+				A03F29772D10A8CA00AD27D2 /* KastorPriv.hpp */,
+				A03F29792D10A8CA00AD27D2 /* Kastor.cpp */,
+			);
+			path = Kastor;
+			sourceTree = "<group>";
+		};
 		A069021D2AF73BB400766C7A = {
 			isa = PBXGroup;
 			children = (
 				A0BD31CE2BCD7C0D008C94C8 /* Polydeukes */,
+				A03F29742D10A8CA00AD27D2 /* Kastor */,
 				A06902272AF73BB400766C7A /* Products */,
 				A06902312AF73E0C00766C7A /* Frameworks */,
 			);
@@ -221,6 +248,7 @@
 			isa = PBXGroup;
 			children = (
 				A06902262AF73BB400766C7A /* Polydeukes */,
+				A03F29732D10A8CA00AD27D2 /* libKastor.dylib */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -251,7 +279,36 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXHeadersBuildPhase section */
+		A03F296F2D10A8CA00AD27D2 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A03F29762D10A8CA00AD27D2 /* Kastor.hpp in Headers */,
+				A03F29782D10A8CA00AD27D2 /* KastorPriv.hpp in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
 /* Begin PBXNativeTarget section */
+		A03F29722D10A8CA00AD27D2 /* Kastor */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A03F297B2D10A8CA00AD27D2 /* Build configuration list for PBXNativeTarget "Kastor" */;
+			buildPhases = (
+				A03F296F2D10A8CA00AD27D2 /* Headers */,
+				A03F29702D10A8CA00AD27D2 /* Sources */,
+				A03F29712D10A8CA00AD27D2 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Kastor;
+			productName = Kastor;
+			productReference = A03F29732D10A8CA00AD27D2 /* libKastor.dylib */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
 		A06902252AF73BB400766C7A /* Polydeukes */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A069022D2AF73BB400766C7A /* Build configuration list for PBXNativeTarget "Polydeukes" */;
@@ -277,6 +334,9 @@
 			attributes = {
 				LastUpgradeCheck = 1200;
 				TargetAttributes = {
+					A03F29722D10A8CA00AD27D2 = {
+						CreatedOnToolsVersion = 15.4;
+					};
 					A06902252AF73BB400766C7A = {
 						CreatedOnToolsVersion = 12.0.1;
 					};
@@ -296,22 +356,31 @@
 			projectRoot = "";
 			targets = (
 				A06902252AF73BB400766C7A /* Polydeukes */,
+				A03F29722D10A8CA00AD27D2 /* Kastor */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A03F29702D10A8CA00AD27D2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A03F297A2D10A8CA00AD27D2 /* Kastor.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A06902222AF73BB400766C7A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A03F297E2D10B33100AD27D2 /* main.cpp in Sources */,
 				A02D58D52CF3A18600916308 /* cube.cpp in Sources */,
 				A02D58CE2CF3A18600916308 /* glad.c in Sources */,
 				A02D58D72CF3A18600916308 /* square.cpp in Sources */,
 				A02D58D12CF3A18600916308 /* MeshSpawner.cpp in Sources */,
 				A02D58D62CF3A18600916308 /* sphere.cpp in Sources */,
 				A02D58CF2CF3A18600916308 /* Arcball.cpp in Sources */,
-				A02D58D02CF3A18600916308 /* main.cpp in Sources */,
 				A02D58D42CF3A18600916308 /* axies.cpp in Sources */,
 				A02D58D32CF3A18600916308 /* renderer.cpp in Sources */,
 				A02D58D22CF3A18600916308 /* MousePicker.cpp in Sources */,
@@ -321,6 +390,50 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		A03F297C2D10A8CA00AD27D2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = R2HV44MX62;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				EXECUTABLE_PREFIX = lib;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				GCC_SYMBOLS_PRIVATE_EXTERN = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.5;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		A03F297D2D10A8CA00AD27D2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = R2HV44MX62;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				EXECUTABLE_PREFIX = lib;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				GCC_SYMBOLS_PRIVATE_EXTERN = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.5;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		A069022B2AF73BB400766C7A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -467,6 +580,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A03F297B2D10A8CA00AD27D2 /* Build configuration list for PBXNativeTarget "Kastor" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A03F297C2D10A8CA00AD27D2 /* Debug */,
+				A03F297D2D10A8CA00AD27D2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A06902212AF73BB400766C7A /* Build configuration list for PBXProject "Polydeukes" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

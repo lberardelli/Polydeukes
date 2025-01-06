@@ -12,8 +12,8 @@
 #include <GLFW/glfw3.h>
 #include "clickable.h"
 #include "Camera.h"
-#include "../control/ShaderProgram.h"
-#include "../control/vector.h"
+#include "ShaderProgram.h"
+#include "../model/vector.h"
 
 #ifndef square_h
 #define square_h
@@ -92,8 +92,8 @@ public:
         glm::vec3 direction = glm::vec3(camera->getDirection().x * 10, camera->getDirection().y * 10, camera->getDirection().z * 10);
         modellingTransform = glm::translate(modellingTransform, direction);
         modellingTransform = modellingTransform * glm::inverse(camera->arcballTransformation());
-        modellingTransform = glm::translate(modellingTransform, glm::vec3(20.0f, 3.0f - currentCount * 3, -40.0f));
-        modellingTransform = glm::scale(modellingTransform, glm::vec3(2.f,2.f,2.f));
+        modellingTransform = glm::translate(modellingTransform, glm::vec3(5.0f, 1.0f - currentCount, 1.0f));
+        modellingTransform = glm::scale(modellingTransform, glm::vec3(.5f,.5f,.5f));
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
         glm::mat4 tmp = modellingTransform * meshTransform;

@@ -13,6 +13,7 @@
 #include <gtc/type_ptr.hpp>
 #include <GLFW/glfw3.h>
 #include <cmath>
+#include <vector>
 
 class Camera {
     
@@ -101,6 +102,23 @@ private:
 
     
 public:
+    
+    std::vector<glm::vec3> fovThroughOrigin() {
+        // Compute distance from the origin to the camera's position
+        float distance = glm::length(position);
+
+        // Convert FoV to radians and compute half FoV
+        float halfFovRadians = glm::radians(45.0f) / 2.0f;
+
+        // Compute the width and height of the plane
+        float height = 2.0f * distance * std::tan(halfFovRadians);
+        float width = height * (float)16/(float)9;
+
+        // Compute bottom-left and top-right corners
+        glm::vec3 bottomLeft = -0.5f * width * x_axis - 0.5f * height * y_axis;
+        glm::vec3 topRight = 0.5f * width * x_axis + 0.5f * height * y_axis;
+        return {bottomLeft, topRight};
+    }
   
     glm::mat4 viewingTransformation() const {
         return view;

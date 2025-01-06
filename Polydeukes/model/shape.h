@@ -14,7 +14,7 @@
 #include "clickable.h"
 #include "mesh.h"
 #include "texture.h"
-#include "../control/ShaderProgram.h"
+#include "ShaderProgram.h"
 #include <glad/glad.h>
 
 #include <limits>

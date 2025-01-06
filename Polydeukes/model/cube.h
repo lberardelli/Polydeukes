@@ -13,7 +13,7 @@
 #include <GLFW/glfw3.h>
 
 #include "shape.h"
-#include "../control/ShaderProgram.h"
+#include "ShaderProgram.h"
 #include "mesh.h"
 #include <vector>
 

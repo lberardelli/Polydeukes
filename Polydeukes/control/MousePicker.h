@@ -14,7 +14,7 @@
 #include "../model/Scene.h"
 #include "../model/shape.h"
 #include "Arcball.h"
-#include "vector.h"
+#include "../model/vector.h"
 
 #include <vector>
 #include <algorithm>

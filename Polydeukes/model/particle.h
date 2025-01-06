@@ -12,7 +12,7 @@
 #include <functional>
 
 #include <glm.hpp>
-#include "vector.h"
+#include "../model/vector.h"
 
 class Spring;
 class Gravity;
@@ -112,7 +112,7 @@ public:
         glm::vec3 currentPosition = particle.getPosition();
         glm::vec3 delta = currentPosition - initialPosition;
         float deltaLength = glm::length(delta);
-        coilShape->setModelingTransform(vector::scaleGeometryBetweenTwoPointsTransformation(currentPosition, initialPosition));
+        coilShape->setModelingTransform(vector::scalGeometryBetweenTwoPointsStretch(currentPosition, initialPosition));
         float magnitude = -1.0f * springConstant * (glm::length(delta) - restingLength);
         glm::vec3 direction = glm::normalize(delta);
         glm::vec3 force = glm::vec3(direction.x * magnitude, direction.y * magnitude, direction.z * magnitude);

@@ -9,7 +9,7 @@
 #define renderer_h
 
 #include "../model/cube.h"
-#include "../control/ShaderProgram.h"
+#include "../model/ShaderProgram.h"
 #include "../model/light.hpp"
 #include "../model/Scene.h"
 #include "../model/shape.h"
@@ -213,8 +213,8 @@ public:
             auto end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> duration = end - start;
             double frameTime = duration.count();
-            if (frameTime < (1.f/24.f)) {
-                std::chrono::duration<double> sleepTime((1.f/24.f) - frameTime);
+            if (frameTime < (1.f/60.f)) {
+                std::chrono::duration<double> sleepTime((1.f/60.f) - frameTime);
                 std::this_thread::sleep_for(sleepTime);
             }
             if (i % 10 == 0) {
