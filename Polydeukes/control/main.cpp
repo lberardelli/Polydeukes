@@ -378,7 +378,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-int GRANULARITY = 10;
+int GRANULARITY = 20;
 
 //TODO: Make a switch to go between 2d and 3d modes
 std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints) {
@@ -827,8 +827,10 @@ void renderGPUSplineStudy(GLFWwindow* window) {
          getShaderDirectory() + "addnormalgs.glsl");
     ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
     ShaderProgram ndcProgram(getShaderDirectory() + "ndcvs.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
     program.init();
     ndcProgram.init();
+    glyphProgram.init();
     Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
     camera.enableFreeCameraMovement(window);
     Scene theScene{};
@@ -1053,71 +1055,18 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
         //evaluate the curve
         std::vector<std::vector<glm::vec3>> curves{};
-        std::vector<glm::vec3> screenSpaceCurve{};
+        std::vector<glm::vec2> twodCurve{};
         for (int i = 0; i < controlPoints.size() - 3; i+=4) {
             std::vector<std::shared_ptr<Shape>> thisCurve{controlPoints[i], controlPoints[i+1], controlPoints[i+2], controlPoints[i+3]};
             std::vector<glm::vec3> curve = computeBezierCurve(thisCurve);
             //transform to screen space
             for (auto point : curve) {
-                screenSpaceCurve.push_back(clipToScreenSpace(renderer.getProjectionTransform() * renderer.getViewingTransform() * glm::vec4(point,1.0f), Renderer::screen_width, Renderer::screen_height));
+                twodCurve.push_back(clipToScreenSpace(renderer.getProjectionTransform() * renderer.getViewingTransform() * glm::vec4(point,1.0f), Renderer::screen_width, Renderer::screen_height));
             }
             curves.push_back(curve);
         }
-        for (auto p : screenSpaceCurve) {
-            std::cout << p.x << ", " << p.y << ", " << p.z <<std::endl;
-        }
-        //absolutely insane but i'm gonna iterate over every pixel and test inside y/n
-        for (int j = 0; j < Renderer::screen_height; ++j) {
-            for (int i = 0; i < Renderer::screen_width; ++i) {
-                Ray ray;
-                ray.origin = glm::vec3(i, j, 0.f);
-                ray.direction = glm::vec3(1.0f,0.0f,0.0f);
-                int nIntersections = 0;
-                for (int k = 0; k < screenSpaceCurve.size(); ++k) {
-                    //just ignore vertex intersections for now.
-                    if (std::abs(screenSpaceCurve[k].y - (float)j) < 0.00001) {
-                        continue;
-                    }
-                    int next = k + 1;
-                    if (k == screenSpaceCurve.size()-1) {
-                        next = 0;
-                    }
-//                    if (k == GRANULARITY * 2 - 1) {
-//                        next = 0;
-//                    }
-//                    if (k == GRANULARITY * 4 -1) {
-//                        next = GRANULARITY * 2;
-//                    }
-                    glm::vec3 lineDir = screenSpaceCurve[next] - screenSpaceCurve[k];
-                    glm::vec3 crossDir = glm::cross(ray.direction, lineDir);
-                    float denom = glm::dot(crossDir, crossDir);
-                    if (denom < 0.001f) {
-                        continue;
-                    }
-                    glm::vec3 vec = screenSpaceCurve[k] - ray.origin;
-
-                    float t = glm::dot(glm::cross(vec, lineDir), crossDir) / denom;
-                    float s = glm::dot(glm::cross(vec, ray.direction), crossDir) / denom;
-
-                    if (t < 0.0f || s < 0.0f || s > 1.0f) {
-                        continue;
-                    }
-                    ++nIntersections;
-                }
-                if (nIntersections == 0) {
-                    break;
-                }
-                if (nIntersections % 2 == 1) {
-                    if (i == 0) {
-                        std::cout << "Out of range inside " << std::endl;
-                    }
-                    glm::vec4 position = screenToNDC(i, j, Renderer::screen_width, Renderer::screen_height);
-                    auto square = SquareBuilder().build();
-                    square->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(position.x, position.y, position.z)) * glm::scale(glm::mat4(1.0f), glm::vec3(.01f,.01f,.01f)));
-                    renderer.addMesh(square, &ndcProgram);
-                }
-            }
-        }
+        auto glyph = std::shared_ptr<Shape>(new Glyph(twodCurve));
+        renderer.addMesh(glyph, &glyphProgram);
     }).build());
     picker.enable(window);
     MeshDragger::camera = &camera;

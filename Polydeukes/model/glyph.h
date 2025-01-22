@@ -17,10 +17,12 @@
 class Glyph : public Shape {
 private:
     GLuint ubo, vao, vbo, ebo;
+    int numEdges{};
 
 public:
     
     virtual void render(ShaderProgram shaderProgram) override {
+        shaderProgram.setVec2("resolution", glm::vec2(1600,900));
         GLuint blockIndex = glGetUniformBlockIndex(shaderProgram.pid, "EdgeData");
         glUniformBlockBinding(shaderProgram.pid, blockIndex, 0);
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
@@ -32,13 +34,16 @@ public:
         return nullptr;
     }
     
-    Glyph(const std::vector<glm::vec2>& polygon) {
+    Glyph(const std::vector<glm::vec2>& wrongPolygon) {
+        std::vector<glm::vec2> polygon{};
+        for (auto p : wrongPolygon) {
+            polygon.push_back(glm::vec2(p.x, 900-p.y));
+        }
         std::vector<glm::vec4> edges{};
-        int numEdges{};
         for (int i = 0; i < polygon.size(); ++i) {
             int next = i + 1;
-            if (i == polygon.size()) {
-                next = 0;
+            if (i == 79) {
+                next = i - 79;
             }
             edges.push_back(glm::vec4(polygon[i].x, polygon[i].y, polygon[next].x, polygon[next].y));
         }

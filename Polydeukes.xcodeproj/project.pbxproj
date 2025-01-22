@@ -106,6 +106,7 @@
 		A089759E2D400A240058E09E /* ndcvs.glsl */ = {isa = PBXFileReference; lastKnownFileType = text; path = ndcvs.glsl; sourceTree = "<group>"; };
 		A089759F2D41223F0058E09E /* glyph.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = glyph.h; sourceTree = "<group>"; };
 		A08975A02D4126130058E09E /* glyphfs.glsl */ = {isa = PBXFileReference; lastKnownFileType = text; path = glyphfs.glsl; sourceTree = "<group>"; };
+		A08975A12D4134140058E09E /* glyphvs.glsl */ = {isa = PBXFileReference; lastKnownFileType = text; path = glyphvs.glsl; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -226,6 +227,7 @@
 				A02D58CC2CF3A18600916308 /* vertexshader.glsl */,
 				A089759E2D400A240058E09E /* ndcvs.glsl */,
 				A08975A02D4126130058E09E /* glyphfs.glsl */,
+				A08975A12D4134140058E09E /* glyphvs.glsl */,
 			);
 			path = shaders;
 			sourceTree = "<group>";

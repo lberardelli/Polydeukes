@@ -217,6 +217,10 @@ public:
         glUniform3fv(glGetUniformLocation(pid, name.c_str()), 1, glm::value_ptr(data));
     }
     
+    void setVec2(std::string&& name, glm::vec2 data) {
+        glUniform2fv(glGetUniformLocation(pid, name.c_str()), 1, glm::value_ptr(data));
+    }
+    
     void setFloat(std::string&& name, float& data) {
         glUniform1fv(glGetUniformLocation(pid, name.c_str()), 1, &data);
     }
