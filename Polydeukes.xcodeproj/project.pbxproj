@@ -103,6 +103,9 @@
 		A06902462AF7433800766C7A /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		A06902482AF7434600766C7A /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		A069024A2AF7435100766C7A /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		A089759E2D400A240058E09E /* ndcvs.glsl */ = {isa = PBXFileReference; lastKnownFileType = text; path = ndcvs.glsl; sourceTree = "<group>"; };
+		A089759F2D41223F0058E09E /* glyph.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = glyph.h; sourceTree = "<group>"; };
+		A08975A02D4126130058E09E /* glyphfs.glsl */ = {isa = PBXFileReference; lastKnownFileType = text; path = glyphfs.glsl; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -196,6 +199,7 @@
 				A02D58B92CF3A18600916308 /* square.h */,
 				A02D58BA2CF3A18600916308 /* texture.h */,
 				A00027482D2ADBA3000246C7 /* grid.h */,
+				A089759F2D41223F0058E09E /* glyph.h */,
 			);
 			path = model;
 			sourceTree = "<group>";
@@ -220,6 +224,8 @@
 				A02D58CA2CF3A18600916308 /* splinefs.glsl */,
 				A02D58CB2CF3A18600916308 /* splinesurfacetcs.glsl */,
 				A02D58CC2CF3A18600916308 /* vertexshader.glsl */,
+				A089759E2D400A240058E09E /* ndcvs.glsl */,
+				A08975A02D4126130058E09E /* glyphfs.glsl */,
 			);
 			path = shaders;
 			sourceTree = "<group>";

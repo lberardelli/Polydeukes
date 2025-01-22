@@ -23,7 +23,6 @@ private:
     
     std::string vertexShaderName;
     std::string fragmentShaderName;
-    unsigned int pid;
     
     std::string readShaderFromFile(std::string& shader) {
         std::string content;
@@ -45,6 +44,7 @@ private:
     }
     
 public:
+    unsigned int pid;
     
     ShaderProgram(std::string vertexShaderName, std::string fragmentShaderName) : vertexShaderName{vertexShaderName}, fragmentShaderName{fragmentShaderName} {}
     

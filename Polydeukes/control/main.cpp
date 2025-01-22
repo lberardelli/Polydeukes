@@ -28,6 +28,7 @@
 #include "../model/spline.h"
 #include "../model/objinterpreter.h"
 #include "../model/grid.h"
+#include "../model/glyph.h"
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -377,7 +378,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-int GRANULARITY = 100;
+int GRANULARITY = 10;
 
 //TODO: Make a switch to go between 2d and 3d modes
 std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints) {
@@ -795,6 +796,25 @@ std::vector<std::pair<float, float>> findIntersections(std::vector<glm::vec3> P,
     return intersections;
 }
 
+glm::vec4 clipToScreenSpace(glm::vec4 clipSpaceCoord, float screenWidth, float screenHeight) {
+    glm::vec4 screenSpaceCoord;
+    clipSpaceCoord = clipSpaceCoord / clipSpaceCoord.w;
+    screenSpaceCoord.x = (clipSpaceCoord.x + 1.0f) * 0.5f * screenWidth;
+    screenSpaceCoord.y = (1.0f - clipSpaceCoord.y) * 0.5f * screenHeight;
+    screenSpaceCoord.z = 0.f;
+    screenSpaceCoord.w = clipSpaceCoord.w;
+    return screenSpaceCoord;
+}
+
+glm::vec4 screenToNDC(int x, int y, int screen_width, int screen_height) {
+    float normalizedX = static_cast<float>(x) / screen_width;
+    float normalizedY = static_cast<float>(y) / screen_height;
+    float ndcX = 2.0f * normalizedX - 1.0f;
+    float ndcY = 1.0f - 2.0f * normalizedY;
+
+    return glm::vec4(ndcX, ndcY, 0.f, 1.0f);
+}
+
 
 void renderGPUSplineStudy(GLFWwindow* window) {
     ShaderProgram splineCurveProgram;
@@ -806,7 +826,9 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     splineSurfaceNormalProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinesurfacetcs.glsl", getShaderDirectory() + "beziersurfacetes.glsl", getShaderDirectory() + "lightsourceshader.glsl",
          getShaderDirectory() + "addnormalgs.glsl");
     ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    ShaderProgram ndcProgram(getShaderDirectory() + "ndcvs.glsl", getShaderDirectory() + "fragmentshader.glsl");
     program.init();
+    ndcProgram.init();
     Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
     camera.enableFreeCameraMovement(window);
     Scene theScene{};
@@ -1031,42 +1053,68 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
         //evaluate the curve
         std::vector<std::vector<glm::vec3>> curves{};
+        std::vector<glm::vec3> screenSpaceCurve{};
         for (int i = 0; i < controlPoints.size() - 3; i+=4) {
             std::vector<std::shared_ptr<Shape>> thisCurve{controlPoints[i], controlPoints[i+1], controlPoints[i+2], controlPoints[i+3]};
             std::vector<glm::vec3> curve = computeBezierCurve(thisCurve);
+            //transform to screen space
+            for (auto point : curve) {
+                screenSpaceCurve.push_back(clipToScreenSpace(renderer.getProjectionTransform() * renderer.getViewingTransform() * glm::vec4(point,1.0f), Renderer::screen_width, Renderer::screen_height));
+            }
             curves.push_back(curve);
         }
-        //need the highest point and the lowest point
-        float highestPoint = -100.f;
-        float lowestPoint = 100.f;
-        float leftMostPoint = 100.f;
-        for (auto curve : curves) {
-            for (auto point : curve) {
-                if (point.y > highestPoint) {
-                    highestPoint = point.y;
-                }
-                if (point.y < lowestPoint) {
-                    lowestPoint = point.y;
-                }
-                if (point.x < leftMostPoint) {
-                    leftMostPoint = point.x;
-                }
-            }
+        for (auto p : screenSpaceCurve) {
+            std::cout << p.x << ", " << p.y << ", " << p.z <<std::endl;
         }
-        //starting from the highest to the lowest points, project rays through the glyph and collect interior intervals.
-        for (float y = highestPoint; y >= lowestPoint; y -= 0.01f) {
-            Ray ray;
-            ray.origin = glm::vec3(leftMostPoint-10.f, y, 0.0f);
-            ray.direction = glm::vec3(1.0f,0.0f,0.0f);
-            for (int i = 0; i < controlPoints.size() - 3; i+=4) {
-                std::vector<glm::vec3> thisCurve{controlPoints[i].get()->getPosition(), controlPoints[i+1].get()->getPosition(), controlPoints[i+2].get()->getPosition(), controlPoints[i+3].get()->getPosition()};
-                auto intersections = findIntersections(thisCurve, y);
-                for (const auto& [x, u] : intersections) {
-                    auto cube = CubeBuilder().build();
-                    cube->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
-                    cube->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(x,y,0.f)));
-                    
-                    renderer.addMesh(cube);
+        //absolutely insane but i'm gonna iterate over every pixel and test inside y/n
+        for (int j = 0; j < Renderer::screen_height; ++j) {
+            for (int i = 0; i < Renderer::screen_width; ++i) {
+                Ray ray;
+                ray.origin = glm::vec3(i, j, 0.f);
+                ray.direction = glm::vec3(1.0f,0.0f,0.0f);
+                int nIntersections = 0;
+                for (int k = 0; k < screenSpaceCurve.size(); ++k) {
+                    //just ignore vertex intersections for now.
+                    if (std::abs(screenSpaceCurve[k].y - (float)j) < 0.00001) {
+                        continue;
+                    }
+                    int next = k + 1;
+                    if (k == screenSpaceCurve.size()-1) {
+                        next = 0;
+                    }
+//                    if (k == GRANULARITY * 2 - 1) {
+//                        next = 0;
+//                    }
+//                    if (k == GRANULARITY * 4 -1) {
+//                        next = GRANULARITY * 2;
+//                    }
+                    glm::vec3 lineDir = screenSpaceCurve[next] - screenSpaceCurve[k];
+                    glm::vec3 crossDir = glm::cross(ray.direction, lineDir);
+                    float denom = glm::dot(crossDir, crossDir);
+                    if (denom < 0.001f) {
+                        continue;
+                    }
+                    glm::vec3 vec = screenSpaceCurve[k] - ray.origin;
+
+                    float t = glm::dot(glm::cross(vec, lineDir), crossDir) / denom;
+                    float s = glm::dot(glm::cross(vec, ray.direction), crossDir) / denom;
+
+                    if (t < 0.0f || s < 0.0f || s > 1.0f) {
+                        continue;
+                    }
+                    ++nIntersections;
+                }
+                if (nIntersections == 0) {
+                    break;
+                }
+                if (nIntersections % 2 == 1) {
+                    if (i == 0) {
+                        std::cout << "Out of range inside " << std::endl;
+                    }
+                    glm::vec4 position = screenToNDC(i, j, Renderer::screen_width, Renderer::screen_height);
+                    auto square = SquareBuilder().build();
+                    square->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(position.x, position.y, position.z)) * glm::scale(glm::mat4(1.0f), glm::vec3(.01f,.01f,.01f)));
+                    renderer.addMesh(square, &ndcProgram);
                 }
             }
         }
@@ -1608,6 +1656,9 @@ int main(int argc, const char * argv[]) {
     }
     const GLubyte* version = glGetString(GL_VERSION);
     std::cout << "OpenGL Version: " << version << std::endl;
+    GLint maxBlockSize;
+    glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
+    std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
     std::string fullPath = __FILE__; // Absolute path of this source file
     std::cout << fullPath.substr(0, fullPath.find_last_of("/")) << std::endl;
