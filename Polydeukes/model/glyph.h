@@ -34,18 +34,18 @@ public:
         return nullptr;
     }
     
-    Glyph(const std::vector<glm::vec2>& wrongPolygon) {
-        std::vector<glm::vec2> polygon{};
-        for (auto p : wrongPolygon) {
-            polygon.push_back(glm::vec2(p.x, 900-p.y));
-        }
+    Glyph(const std::vector<std::vector<glm::vec2>>& screenSpaceBezierPaths) {
         std::vector<glm::vec4> edges{};
-        for (int i = 0; i < polygon.size(); ++i) {
-            int next = i + 1;
-            if (i == 79) {
-                next = i - 79;
+        std::vector<glm::vec2> polygon{};
+        for (auto path : screenSpaceBezierPaths) {
+            for (int i = 0; i < path.size(); ++i) {
+                int next = i + 1;
+                if (i == path.size()-1) {
+                    next = 0;
+                }
+                edges.push_back(glm::vec4(path[i].x, 900 - path[i].y, path[next].x, 900 - path[next].y));
+                polygon.push_back(glm::vec2(path[i].x, 900 - path[i].y));
             }
-            edges.push_back(glm::vec4(polygon[i].x, polygon[i].y, polygon[next].x, polygon[next].y));
         }
         numEdges = (int)edges.size();
         //compute the bounding box
@@ -62,12 +62,12 @@ public:
         
         glGenBuffers(1, &ubo);
         glBindBuffer(GL_UNIFORM_BUFFER, ubo);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * numEdges + sizeof(int), nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 1024 + sizeof(int), nullptr, GL_STATIC_DRAW);
 
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::vec4) * numEdges, edges.data());
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::vec4) * 1024, edges.data());
 
         // Upload the number of edges
-        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * numEdges, sizeof(int), &numEdges);
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::vec4) * 1024, sizeof(int), &numEdges);
         
         float quadVertices[] = {
             minX, minY,
@@ -95,7 +95,6 @@ public:
 
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
-
     }
     
 };

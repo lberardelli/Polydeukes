@@ -10,7 +10,7 @@ uniform vec2 resolution;
 
 // Uniform Buffer Object (UBO) to store edges
 layout(std140) uniform EdgeData {
-    vec4 edges[80]; // Each edge is stored as vec4 (x1, y1, x2, y2)
+    vec4 edges[1024]; // Each edge is stored as vec4 (x1, y1, x2, y2)
     int numEdges; // Total number of edges
 };
 

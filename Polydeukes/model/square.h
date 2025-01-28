@@ -92,7 +92,7 @@ public:
         glm::vec3 direction = glm::vec3(camera->getDirection().x * 10, camera->getDirection().y * 10, camera->getDirection().z * 10);
         modellingTransform = glm::translate(modellingTransform, direction);
         modellingTransform = modellingTransform * glm::inverse(camera->arcballTransformation());
-        modellingTransform = glm::translate(modellingTransform, glm::vec3(5.0f, 2.0f - currentCount, 1.0f));
+        modellingTransform = glm::translate(modellingTransform, glm::vec3(5.0f, 3.0f - currentCount, 1.0f));
         modellingTransform = glm::scale(modellingTransform, glm::vec3(.5f,.5f,.5f));
         shaderProgram.setMat4("model", modellingTransform);
         shaderProgram.setVec3("aColour", colour);
