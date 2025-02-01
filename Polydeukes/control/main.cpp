@@ -385,7 +385,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-int GRANULARITY = 20;
+int GRANULARITY = 10;
 
 //TODO: Make a switch to go between 2d and 3d modes
 std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints) {
@@ -997,29 +997,28 @@ void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std:
     renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
 }
 
+void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer);
 
-void renderGPUSplineStudy(GLFWwindow* window) {
-    ShaderProgram splineCurveProgram;
-    splineCurveProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinecurvetcs.glsl", getShaderDirectory() + "beziertes.glsl", getShaderDirectory() + "splinefs.glsl");
-    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
-    ShaderProgram ndcProgram(getShaderDirectory() + "ndcvs.glsl", getShaderDirectory() + "fragmentshader.glsl");
-    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
-    program.init();
-    ndcProgram.init();
-    glyphProgram.init();
-    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
-    camera.enableFreeCameraMovement(window);
-    Scene theScene{};
-    Renderer renderer(&theScene,&program);
-    Arcball arcball(&camera);
-    std::vector<glm::vec3> corners = camera.fovThroughOrigin();
-    auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], 20, 20));
+void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::string outFileName, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer)
+{
+    //these setup functions are transition operations to execute during transitions between states lol.
     renderer.addMesh(grid);
-    std::vector<std::shared_ptr<Shape>> controlPoints{};
-    std::vector<HermiteControlPoint> hermiteControlPoints{};
-    SplineShapeRelation splineContainer{};
-    SplineShapeRelation splineSurfaceContainer{};
-    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
+    for (auto s : display) {
+        renderer.removeShape(s);
+    }
+    for (auto icon : icons) {
+        renderer.addMesh(icon);
+    }
+    nCurveClicks = 0;
+    endOfLastPath = 0;
+    bHidden = false;
+    bAlreadyClicked = false;
+    controlPoints.clear();
+    splineContainer.controlPoints.clear();
+    splineContainer.splines.clear();
+    bezierPaths.clear();
+    
+    auto clickCallback = [&, window](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
         glm::vec3 position = vector::rayPlaneIntersection(plane, mouseRay);
@@ -1027,18 +1026,20 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
         controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), position));
         controlPoints.push_back(controlPoint);
-        controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
+        controlPoint->setOnClick([window](std::weak_ptr<Shape> targetShape) {
             MeshDragger::registerMousePositionCallback(window, targetShape);
         });
         controlPoint->setOnRightClick([&](std::weak_ptr<Shape> targetShape) {
             controlPoints.push_back(targetShape.lock());
         });
         renderer.addMesh(controlPoint);
-    }, [&arcball, window](double x, double y) {
+    };
+    auto rightClickCallback = [&arcball, window](double x, double y) {
         arcball.registerRotationCallback(window, x, y);
-    });
-    int nCurveClicks = 0;
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+    };
+    picker.setClickCustomization(clickCallback);
+    picker.setRightClickCustomization(rightClickCallback);
+    icons[0]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
         if (controlPoints.size() % 4 != 0) {
             return;
         }
@@ -1063,10 +1064,8 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             });
         }
         renderer.addMesh(spline, &splineCurveProgram);
-    }).withColour(glm::vec3(0.212,0.329,.369)).build());
-    bool bHidden = false;
-    bool bAlreadyClicked = false;
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+    });
+    icons[1]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
         if (!bAlreadyClicked) {
             renderer.removeShape(grid);
             bAlreadyClicked = true;
@@ -1074,8 +1073,8 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             bAlreadyClicked = false;
             renderer.addMesh(grid);
         }
-    }).withColour(glm::vec3(0.212,0.329,.369)).build());
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+    });
+    icons[2]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
         if (bHidden) {
             for (auto controlPoint : controlPoints) {
                 renderer.addMesh(controlPoint);
@@ -1087,26 +1086,25 @@ void renderGPUSplineStudy(GLFWwindow* window) {
             }
         }
         bHidden = !bHidden;
-    }).build());
-    std::vector<std::vector<std::vector<glm::vec3>>> bezierPaths{};
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+    });
+    icons[3]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
         //evaluate the curve
-        std::vector<std::vector<glm::vec2>> screenSpacePaths{};
+        std::vector<std::vector<glm::vec2>> worldSpacePaths{};
         for (auto path : bezierPaths) {
-            std::vector<glm::vec2> screenSpacePath{};
+            std::vector<glm::vec2> worldSpacePath{};
             for (auto segment : path) {
                 std::vector<glm::vec3> curve = computeBezierCurve(segment);
                 for (auto position : curve) {
-                    screenSpacePath.push_back(clipToScreenSpace(renderer.getProjectionTransform() * renderer.getViewingTransform() * glm::vec4(position,1.0f), Renderer::screen_width, Renderer::screen_height));
+                    worldSpacePath.push_back(position);
                 }
             }
-            screenSpacePaths.push_back(screenSpacePath);
+            worldSpacePaths.push_back(worldSpacePath);
         }
-        auto glyph = std::shared_ptr<Shape>(new Glyph(screenSpacePaths));
+        auto glyph = std::shared_ptr<Shape>(new Glyph(worldSpacePaths));
+        glyphContainer.push_back(glyph);
         renderer.addMesh(glyph, &glyphProgram);
-    }).build());
-    int endOfLastPath = 0;
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+    });
+    icons[4]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
         //define a bezier path
         std::vector<std::vector<glm::vec3>> bezierPath{};
         for (int i = endOfLastPath; i < controlPoints.size()-3; i+=4) {
@@ -1118,12 +1116,11 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         }
         endOfLastPath = controlPoints.size();
         bezierPaths.push_back(bezierPath);
-    }).build());
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
+    });
+    icons[5]->setOnClick([&, outFileName, window](std::weak_ptr<Shape> theIcon) {
         //output the bezier paths
         std::string dir = getFontDirectory();
-        std::ofstream of(dir + "/first");
-        std::cout << dir + "/first" << std::endl;
+        std::ofstream of(dir + "/" + outFileName, std::ios::out);
         if (of.is_open()) {
             of << "paths:\n";
             for (auto path : bezierPaths) {
@@ -1135,13 +1132,15 @@ void renderGPUSplineStudy(GLFWwindow* window) {
                     }
                 }
             }
+            //go back to main menu.
+            fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, icons, bHidden, bAlreadyClicked, glyphContainer);
         }
         else {
             std::cout << "Failed to open file!" << std::endl;
         }
-    }).build());
-    renderer.addMesh(IconBuilder(&camera).withOnClickCallback([&](std::weak_ptr<Shape> theIcon) {
-            //read in the bezier paths
+    });
+    icons[6]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
+        //read in the bezier paths
         std::string dir = getFontDirectory();
         std::ifstream ifs(dir + "/first");
         std::cout << dir + "/first" << std::endl;
@@ -1185,7 +1184,77 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         else {
             std::cout << "Failed to open file!" << std::endl;
         }
-    }).build());
+    });
+}
+
+void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer)
+{
+    int i = 0;
+    for (auto icon : icons) {
+        renderer.removeShape(icon);
+    }
+    for (auto spline : splineContainer.splines) {
+        renderer.removeShape(spline);
+    }
+    for (auto controlPoint : splineContainer.controlPoints) {
+        renderer.removeShape(controlPoint);
+    }
+    for (auto glyph : glyphContainer) {
+        renderer.removeShape(glyph);
+    }
+    controlPoints.clear();
+    splineContainer.splines.clear();
+    splineContainer.controlPoints.clear();
+    renderer.removeShape(grid);
+    for (auto square : display) {
+        renderer.addMesh(square);
+        square->setOnClick([&, window, i](std::weak_ptr<Shape> theIcon) {
+            fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, std::to_string(i), icons, bHidden, bAlreadyClicked, glyphContainer);
+        });
+        ++i;
+    }
+}
+
+
+void renderGPUSplineStudy(GLFWwindow* window) {
+    ShaderProgram splineCurveProgram;
+    splineCurveProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinecurvetcs.glsl", getShaderDirectory() + "beziertes.glsl", getShaderDirectory() + "splinefs.glsl");
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    program.init();
+    glyphProgram.init();
+    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    camera.enableFreeCameraMovement(window);
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    Arcball arcball(&camera);
+    std::vector<std::shared_ptr<Shape>> controlPoints{};
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [](double,double){});
+    SplineShapeRelation relation{};
+    std::vector<std::vector<std::vector<glm::vec3>>> bezierPaths{};
+    int nCurveClicks = 0; int nBezierPaths = 0;
+    std::vector<glm::vec3> corners = camera.fovThroughOrigin();
+    auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], 20, 20));
+//    fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, relation, bezierPaths, nCurveClicks, nBezierPaths, grid);
+    //define the dimensions of the 27 squares that make up the 9x3 display.
+    float width = corners[1].x - corners[0].x;
+    float height = corners[1].y - corners[0].y;
+    std::vector<std::shared_ptr<Shape>> menuDisplay{};
+    for (int i = 0; i < 27; ++i) {
+        auto square = SquareBuilder().build();
+        square->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(width/9.f,height/3.f,1.f)));
+        square->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + width/18.f + (i % 9) * width/9.f, corners[1].y - height/6.f - (i / 9) * (height / 3.f), 0.f)));
+        float f = (float)i / 100.f;
+        square->setColour(glm::vec3(f, f, f));
+        menuDisplay.push_back(square);
+    }
+    std::vector<std::shared_ptr<Shape>> icons{};
+    for (int i = 0; i < 7; ++i) {
+        icons.push_back(IconBuilder(&camera).build());
+    }
+    bool bHidden = false; bool bAlreadyClicked = false;
+    std::vector<std::shared_ptr<Shape>> glyphContainer{};
+    fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, relation, bezierPaths, nCurveClicks, nBezierPaths, grid, menuDisplay, icons, bHidden, bAlreadyClicked, glyphContainer);
     picker.enable(window);
     MeshDragger::camera = &camera;
     renderer.buildandrender(window, &camera, &theScene);

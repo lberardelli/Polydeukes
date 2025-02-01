@@ -125,6 +125,14 @@ public:
         MousePicker::rightClickCustomization = rightClickCustomization;
     }
     
+    void setClickCustomization(std::function<void(double,double)> clickCustomization) {
+        this->clickCustomization = clickCustomization;
+    }
+    
+    void setRightClickCustomization(std::function<void(double, double)> rightClickCustomization) {
+        this->rightClickCustomization = rightClickCustomization;
+    }
+    
     virtual void enable(GLFWwindow* window) {
         glfwSetMouseButtonCallback(window, mouse_button_callback);
         mousePositionCallback = mouse_position_callback;

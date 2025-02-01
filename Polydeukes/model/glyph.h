@@ -23,6 +23,7 @@ public:
     
     virtual void render(ShaderProgram shaderProgram) override {
         shaderProgram.setVec2("resolution", glm::vec2(1600,900));
+        shaderProgram.setMat4("model", modellingTransform);
         GLuint blockIndex = glGetUniformBlockIndex(shaderProgram.pid, "EdgeData");
         glUniformBlockBinding(shaderProgram.pid, blockIndex, 0);
         glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
@@ -34,17 +35,17 @@ public:
         return nullptr;
     }
     
-    Glyph(const std::vector<std::vector<glm::vec2>>& screenSpaceBezierPaths) {
+    Glyph(const std::vector<std::vector<glm::vec2>>& worldSpaceBezierPaths) {
         std::vector<glm::vec4> edges{};
         std::vector<glm::vec2> polygon{};
-        for (auto path : screenSpaceBezierPaths) {
+        for (auto path : worldSpaceBezierPaths) {
             for (int i = 0; i < path.size(); ++i) {
                 int next = i + 1;
                 if (i == path.size()-1) {
                     next = 0;
                 }
-                edges.push_back(glm::vec4(path[i].x, 900 - path[i].y, path[next].x, 900 - path[next].y));
-                polygon.push_back(glm::vec2(path[i].x, 900 - path[i].y));
+                edges.push_back(glm::vec4(path[i].x, path[i].y, path[next].x, path[next].y));
+                polygon.push_back(glm::vec2(path[i].x, path[i].y));
             }
         }
         numEdges = (int)edges.size();

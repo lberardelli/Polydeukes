@@ -112,7 +112,7 @@ public:
 
         // Compute the width and height of the plane
         float height = 2.0f * distance * std::tan(halfFovRadians);
-        float width = height * (float)16/(float)9;
+        float width = height * (float)1600/(float)900;
 
         // Compute bottom-left and top-right corners
         glm::vec3 bottomLeft = -0.5f * width * x_axis - 0.5f * height * y_axis;

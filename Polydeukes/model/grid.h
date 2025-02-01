@@ -71,7 +71,7 @@ public:
         glDrawArrays(GL_LINES, 0, vertices.size() / 3);
     }
     
-    virtual std::shared_ptr<Shape> clone() {
+    virtual std::shared_ptr<Shape> clone() override {
         return nullptr;
     }
     
