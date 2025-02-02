@@ -35,7 +35,7 @@ bool isInsidePolygon(vec2 point) {
 void main() {
     // Check if the current fragment (pixel) is inside the polygon
     if (isInsidePolygon(fragCoord)) {
-        FragColor = vec4(1.0, 1.0, 1.0, 1.0); // White if inside
+        FragColor = vec4(1.0, 1.0, 1.0, isInsidePolygon(fragCoord) ? 1.0 : 0.0);
     } else {
         discard;
     }

@@ -21,6 +21,8 @@ private:
 
 public:
     
+    float boundingBox[4];
+    
     virtual void render(ShaderProgram shaderProgram) override {
         shaderProgram.setVec2("resolution", glm::vec2(1600,900));
         shaderProgram.setMat4("model", modellingTransform);
@@ -76,6 +78,8 @@ public:
             maxX, maxY,
             minX, maxY
         };
+        
+        boundingBox[0] = minX; boundingBox[1] = minY; boundingBox [2] = maxX; boundingBox[3] = maxY;
 
         unsigned int indices[] = {
             0, 1, 2,

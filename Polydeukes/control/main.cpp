@@ -999,6 +999,67 @@ void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std:
 
 void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer);
 
+std::shared_ptr<Glyph> computeGlyphFromPaths(std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths) {
+    std::vector<std::vector<glm::vec2>> worldSpacePaths{};
+    for (auto path : bezierPaths) {
+        std::vector<glm::vec2> worldSpacePath{};
+        for (auto segment : path) {
+            std::vector<glm::vec3> curve = computeBezierCurve(segment);
+            for (auto position : curve) {
+                worldSpacePath.push_back(position);
+            }
+        }
+        worldSpacePaths.push_back(worldSpacePath);
+    }
+    return std::shared_ptr<Glyph>(new Glyph(worldSpacePaths));
+}
+
+void readlbpFontFile(std::string fileName, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths) {
+    std::string dir = getFontDirectory();
+    std::ifstream ifs(dir + "/" + fileName);
+    if (ifs.is_open()) {
+        std::string line{};
+        std::vector<std::vector<glm::vec3>> path{};
+        std::vector<glm::vec3> segment{};
+        while (std::getline(ifs, line)) {
+            if (line == "paths:") {
+                
+            }
+            else if (line == "\tpath:") {
+                if (!segment.empty()) {
+                    path.push_back(segment);
+                }
+                if (!path.empty()) {
+                    bezierPaths.push_back(path);
+                }
+                path.clear();
+                segment.clear();
+            }
+            else if (line == "\t\tsegment:") {
+                if (!segment.empty()) {
+                    path.push_back(segment);
+                }
+                segment.clear();
+            }
+            else if (line.compare(0, 3, "\t\t\t") == 0) {
+                float f1,f2,f3;
+                std::sscanf(line.c_str(), "\t\t\t%f %f %f", &f1, &f2, &f3);
+                segment.push_back(glm::vec3(f1,f2,f3));
+            }
+        }
+        if (!segment.empty()) {
+            path.push_back(segment);
+        }
+        if (!path.empty()) {
+            bezierPaths.push_back(path);
+        }
+    }
+    else {
+        std::cout << "Failed to open file!" << std::endl;
+    }
+}
+
+
 void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::string outFileName, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer)
 {
     //these setup functions are transition operations to execute during transitions between states lol.
@@ -1009,6 +1070,9 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
     for (auto icon : icons) {
         renderer.addMesh(icon);
     }
+    for (auto g : glyphContainer) {
+        renderer.removeShape(g);
+    }
     nCurveClicks = 0;
     endOfLastPath = 0;
     bHidden = false;
@@ -1017,6 +1081,27 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
     splineContainer.controlPoints.clear();
     splineContainer.splines.clear();
     bezierPaths.clear();
+    glyphContainer.clear();
+    readlbpFontFile(outFileName, bezierPaths);
+    if (!bezierPaths.empty()) {
+        for (auto path : bezierPaths) {
+            for (auto segment : path) {
+                for (auto pos : segment) {
+                    std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+                    controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
+                    controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), pos));
+                    controlPoints.push_back(controlPoint);
+                    controlPoint->setOnClick([window](std::weak_ptr<Shape> targetShape) {
+                        MeshDragger::registerMousePositionCallback(window, targetShape);
+                    });
+                    controlPoint->setOnRightClick([&](std::weak_ptr<Shape> targetShape) {
+                        controlPoints.push_back(targetShape.lock());
+                    });
+                    renderer.addMesh(controlPoint);
+                }
+            }
+        }
+    }
     
     auto clickCallback = [&, window](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
@@ -1088,19 +1173,7 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
         bHidden = !bHidden;
     });
     icons[3]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
-        //evaluate the curve
-        std::vector<std::vector<glm::vec2>> worldSpacePaths{};
-        for (auto path : bezierPaths) {
-            std::vector<glm::vec2> worldSpacePath{};
-            for (auto segment : path) {
-                std::vector<glm::vec3> curve = computeBezierCurve(segment);
-                for (auto position : curve) {
-                    worldSpacePath.push_back(position);
-                }
-            }
-            worldSpacePaths.push_back(worldSpacePath);
-        }
-        auto glyph = std::shared_ptr<Shape>(new Glyph(worldSpacePaths));
+        auto glyph = computeGlyphFromPaths(bezierPaths);
         glyphContainer.push_back(glyph);
         renderer.addMesh(glyph, &glyphProgram);
     });
@@ -1139,52 +1212,6 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
             std::cout << "Failed to open file!" << std::endl;
         }
     });
-    icons[6]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
-        //read in the bezier paths
-        std::string dir = getFontDirectory();
-        std::ifstream ifs(dir + "/first");
-        std::cout << dir + "/first" << std::endl;
-        if (ifs.is_open()) {
-            std::string line{};
-            std::vector<std::vector<glm::vec3>> path{};
-            std::vector<glm::vec3> segment{};
-            while (std::getline(ifs, line)) {
-                if (line == "paths:") {
-                    
-                }
-                else if (line == "\tpath:") {
-                    if (!segment.empty()) {
-                        path.push_back(segment);
-                    }
-                    if (!path.empty()) {
-                        bezierPaths.push_back(path);
-                    }
-                    path.clear();
-                    segment.clear();
-                }
-                else if (line == "\t\tsegment:") {
-                    if (!segment.empty()) {
-                        path.push_back(segment);
-                    }
-                    segment.clear();
-                }
-                else if (line.compare(0, 3, "\t\t\t") == 0) {
-                    float f1,f2,f3;
-                    std::sscanf(line.c_str(), "\t\t\t%f %f %f", &f1, &f2, &f3);
-                    segment.push_back(glm::vec3(f1,f2,f3));
-                }
-            }
-            if (!segment.empty()) {
-                path.push_back(segment);
-            }
-            if (!path.empty()) {
-                bezierPaths.push_back(path);
-            }
-        }
-        else {
-            std::cout << "Failed to open file!" << std::endl;
-        }
-    });
 }
 
 void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer)
@@ -1206,11 +1233,31 @@ void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, S
     splineContainer.splines.clear();
     splineContainer.controlPoints.clear();
     renderer.removeShape(grid);
+    glyphContainer.clear();
     for (auto square : display) {
         renderer.addMesh(square);
         square->setOnClick([&, window, i](std::weak_ptr<Shape> theIcon) {
             fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, std::to_string(i), icons, bHidden, bAlreadyClicked, glyphContainer);
         });
+        std::vector<std::vector<std::vector<glm::vec3>>> paths{};
+        readlbpFontFile(std::to_string(i), paths);
+        if (!paths.empty()) {
+            auto glyph = computeGlyphFromPaths(paths);
+            std::vector<glm::vec3> corners = camera.fovThroughOrigin();
+            float w1 = (corners[1].x - corners[0].x) / 9.f;
+            float h1 = (corners[1].y - corners[0].y) / 3.f;
+            glm::vec2 bl = glm::vec2(glyph->boundingBox[0], glyph->boundingBox[1]);
+            glm::vec2 tr = glm::vec2(glyph->boundingBox[2], glyph->boundingBox[3]);
+            float w2 = tr.x - bl.x;
+            float h2 = tr.y - bl.y;
+            float sx = w1/w2; float sy = h1/h2;
+            glm::vec2 middle = (bl + tr) / (float) 2;
+            glyph->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-1*middle.x, -1*middle.y, 0.f)));
+            glyph->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f)));
+            glyph->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % 9) * w1, corners[1].y - h1/2.f - (i / 9) * h1, 0.1f)));
+            glyphContainer.push_back(glyph);
+            renderer.addMesh(glyph, &glyphProgram);
+        }
         ++i;
     }
 }
@@ -1249,7 +1296,7 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         menuDisplay.push_back(square);
     }
     std::vector<std::shared_ptr<Shape>> icons{};
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 6; ++i) {
         icons.push_back(IconBuilder(&camera).build());
     }
     bool bHidden = false; bool bAlreadyClicked = false;
@@ -1796,8 +1843,6 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    std::string fullPath = __FILE__; // Absolute path of this source file
-    std::cout << fullPath.substr(0, fullPath.find_last_of("/")) << std::endl;
     renderGPUSplineStudy(window);
 
     glfwTerminate();
