@@ -48,15 +48,13 @@ protected:
     glm::mat4 modellingTransform = glm::mat4(1.0f);
     glm::vec3 colour = glm::vec3(1.0f, 1.0f, 1.0f);
     unsigned int texture = 0;
+    bool bInitializedAABB = false;
     unsigned int AABBVAO, AABBEBO, AABBVBO;
     std::weak_ptr<Shape> referenceToThis;
   
 public:
     
     Shape() {
-        glGenVertexArrays(1, &AABBVAO);
-        glGenBuffers(1, &AABBEBO);
-        glGenBuffers(1, &AABBVBO);
     }
     
     virtual ~Shape() {
@@ -77,6 +75,12 @@ public:
     //TODO: Optimize based on probably sharing the VAO reference or smarter aabb calculation
     //Probably can just upload the aabb of a preloaded mesh as soon as it's instantiated. then just apply the modeling transform to it.
     void renderAABB(std::vector<glm::vec3> aabb, ShaderProgram program) {
+        if (!bInitializedAABB) {
+            glGenVertexArrays(1, &AABBVAO);
+            glGenBuffers(1, &AABBEBO);
+            glGenBuffers(1, &AABBVBO);
+            bInitializedAABB = true;
+        }
         glm::mat4 ide = glm::mat4(1.0f);
         program.setMat4("model", ide);
         //define the aabb mesh
@@ -151,9 +155,6 @@ public:
         this->hoverCallback = that.hoverCallback;
         this->offHoverCallback = that.offHoverCallback;
         this->onMouseUpCallback = that.onMouseUpCallback;
-        glGenVertexArrays(1, &AABBVAO);
-        glGenBuffers(1, &AABBEBO);
-        glGenBuffers(1, &AABBVBO);
     }
     
     virtual void onRightClick() override {

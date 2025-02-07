@@ -385,8 +385,6 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-int GRANULARITY = 10;
-
 //TODO: Make a switch to go between 2d and 3d modes
 std::vector<glm::vec3> computeFillPositions(glm::mat4 constraintMatrix, std::vector<glm::vec3>& controlPoints) {
     glm::mat4 blendingMatrix = glm::inverse(constraintMatrix);
@@ -447,29 +445,6 @@ std::vector<glm::vec3> computeBezierCurve(std::vector<std::shared_ptr<Shape>>& c
             glm::vec3 firstInterpolatedValue = currentCurve[1]->getPosition()*(parameterValue) + currentCurve[0]->getPosition() * (1.f-parameterValue);
             glm::vec3 secondInterpolatedValue = currentCurve[2]->getPosition()*(parameterValue) + currentCurve[1]->getPosition() * (1.f-parameterValue);
             glm::vec3 thirdInterpolatedValue = currentCurve[3]->getPosition()*(parameterValue) + currentCurve[2]->getPosition() * (1.f-parameterValue);
-            glm::vec3 secondFirstIV = secondInterpolatedValue*(parameterValue) + firstInterpolatedValue*(1.f-parameterValue);
-            glm::vec3 secondsecondIV = thirdInterpolatedValue*(parameterValue) + secondInterpolatedValue*(1.f-parameterValue);
-            glm::vec3 thirdFirstIV = secondsecondIV * (parameterValue) + secondFirstIV * (1.f-parameterValue);
-            positions.push_back(thirdFirstIV);
-            parameterValue += (float)1.f/(float)GRANULARITY;
-        }
-    }
-    return positions;
-}
-
-std::vector<glm::vec3> computeBezierCurve(std::vector<glm::vec3>& controlPoints) {
-    std::array<glm::vec3, 4> currentCurve;
-    std::vector<glm::vec3> positions{};
-    for (int i = 0; i < controlPoints.size()-3; i+=3) {
-        currentCurve[0] = controlPoints[i];
-        currentCurve[1] = controlPoints[i+1];
-        currentCurve[2] = controlPoints[i+2];
-        currentCurve[3] = controlPoints[i+3];
-        float parameterValue = 0.f;
-        for (int j = 0; j < GRANULARITY; ++j) {
-            glm::vec3 firstInterpolatedValue = currentCurve[1]*(parameterValue) + currentCurve[0] * (1.f-parameterValue);
-            glm::vec3 secondInterpolatedValue = currentCurve[2]*(parameterValue) + currentCurve[1] * (1.f-parameterValue);
-            glm::vec3 thirdInterpolatedValue = currentCurve[3]*(parameterValue) + currentCurve[2] * (1.f-parameterValue);
             glm::vec3 secondFirstIV = secondInterpolatedValue*(parameterValue) + firstInterpolatedValue*(1.f-parameterValue);
             glm::vec3 secondsecondIV = thirdInterpolatedValue*(parameterValue) + secondInterpolatedValue*(1.f-parameterValue);
             glm::vec3 thirdFirstIV = secondsecondIV * (parameterValue) + secondFirstIV * (1.f-parameterValue);
@@ -997,70 +972,10 @@ void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std:
     renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
 }
 
-void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer);
-
-std::shared_ptr<Glyph> computeGlyphFromPaths(std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths) {
-    std::vector<std::vector<glm::vec2>> worldSpacePaths{};
-    for (auto path : bezierPaths) {
-        std::vector<glm::vec2> worldSpacePath{};
-        for (auto segment : path) {
-            std::vector<glm::vec3> curve = computeBezierCurve(segment);
-            for (auto position : curve) {
-                worldSpacePath.push_back(position);
-            }
-        }
-        worldSpacePaths.push_back(worldSpacePath);
-    }
-    return std::shared_ptr<Glyph>(new Glyph(worldSpacePaths));
-}
-
-void readlbpFontFile(std::string fileName, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths) {
-    std::string dir = getFontDirectory();
-    std::ifstream ifs(dir + "/" + fileName);
-    if (ifs.is_open()) {
-        std::string line{};
-        std::vector<std::vector<glm::vec3>> path{};
-        std::vector<glm::vec3> segment{};
-        while (std::getline(ifs, line)) {
-            if (line == "paths:") {
-                
-            }
-            else if (line == "\tpath:") {
-                if (!segment.empty()) {
-                    path.push_back(segment);
-                }
-                if (!path.empty()) {
-                    bezierPaths.push_back(path);
-                }
-                path.clear();
-                segment.clear();
-            }
-            else if (line == "\t\tsegment:") {
-                if (!segment.empty()) {
-                    path.push_back(segment);
-                }
-                segment.clear();
-            }
-            else if (line.compare(0, 3, "\t\t\t") == 0) {
-                float f1,f2,f3;
-                std::sscanf(line.c_str(), "\t\t\t%f %f %f", &f1, &f2, &f3);
-                segment.push_back(glm::vec3(f1,f2,f3));
-            }
-        }
-        if (!segment.empty()) {
-            path.push_back(segment);
-        }
-        if (!path.empty()) {
-            bezierPaths.push_back(path);
-        }
-    }
-    else {
-        std::cout << "Failed to open file!" << std::endl;
-    }
-}
+void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer, std::shared_ptr<FontManager> fontManager);
 
 
-void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::string outFileName, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer)
+void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::string outFileName, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer, std::shared_ptr<FontManager> fontManager)
 {
     //these setup functions are transition operations to execute during transitions between states lol.
     renderer.addMesh(grid);
@@ -1082,26 +997,6 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
     splineContainer.splines.clear();
     bezierPaths.clear();
     glyphContainer.clear();
-    readlbpFontFile(outFileName, bezierPaths);
-    if (!bezierPaths.empty()) {
-        for (auto path : bezierPaths) {
-            for (auto segment : path) {
-                for (auto pos : segment) {
-                    std::shared_ptr<Shape> controlPoint = SphereBuilder::getInstance()->withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
-                    controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.25f,.25f,.25f)));
-                    controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), pos));
-                    controlPoints.push_back(controlPoint);
-                    controlPoint->setOnClick([window](std::weak_ptr<Shape> targetShape) {
-                        MeshDragger::registerMousePositionCallback(window, targetShape);
-                    });
-                    controlPoint->setOnRightClick([&](std::weak_ptr<Shape> targetShape) {
-                        controlPoints.push_back(targetShape.lock());
-                    });
-                    renderer.addMesh(controlPoint);
-                }
-            }
-        }
-    }
     
     auto clickCallback = [&, window](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
@@ -1173,11 +1068,6 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
         bHidden = !bHidden;
     });
     icons[3]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
-        auto glyph = computeGlyphFromPaths(bezierPaths);
-        glyphContainer.push_back(glyph);
-        renderer.addMesh(glyph, &glyphProgram);
-    });
-    icons[4]->setOnClick([&](std::weak_ptr<Shape> theIcon) {
         //define a bezier path
         std::vector<std::vector<glm::vec3>> bezierPath{};
         for (int i = endOfLastPath; i < controlPoints.size()-3; i+=4) {
@@ -1190,7 +1080,7 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
         endOfLastPath = controlPoints.size();
         bezierPaths.push_back(bezierPath);
     });
-    icons[5]->setOnClick([&, outFileName, window](std::weak_ptr<Shape> theIcon) {
+    icons[4]->setOnClick([&, outFileName, window, fontManager](std::weak_ptr<Shape> theIcon) {
         //output the bezier paths
         std::string dir = getFontDirectory();
         std::ofstream of(dir + "/" + outFileName, std::ios::out);
@@ -1206,7 +1096,7 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
                 }
             }
             //go back to main menu.
-            fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, icons, bHidden, bAlreadyClicked, glyphContainer);
+            fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, icons, bHidden, bAlreadyClicked, glyphContainer, fontManager);
         }
         else {
             std::cout << "Failed to open file!" << std::endl;
@@ -1214,7 +1104,7 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
     });
 }
 
-void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer)
+void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer, std::shared_ptr<FontManager> fontManager)
 {
     int i = 0;
     for (auto icon : icons) {
@@ -1234,36 +1124,24 @@ void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, S
     splineContainer.controlPoints.clear();
     renderer.removeShape(grid);
     glyphContainer.clear();
-    for (auto square : display) {
-        renderer.addMesh(square);
-        square->setOnClick([&, window, i](std::weak_ptr<Shape> theIcon) {
-            fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, std::to_string(i), icons, bHidden, bAlreadyClicked, glyphContainer);
-        });
-        std::vector<std::vector<std::vector<glm::vec3>>> paths{};
-        readlbpFontFile(std::to_string(i), paths);
-        if (!paths.empty()) {
-            auto glyph = computeGlyphFromPaths(paths);
-            std::vector<glm::vec3> corners = camera.fovThroughOrigin();
-            float w1 = (corners[1].x - corners[0].x) / 9.f;
-            float h1 = (corners[1].y - corners[0].y) / 3.f;
-            glm::vec2 bl = glm::vec2(glyph->boundingBox[0], glyph->boundingBox[1]);
-            glm::vec2 tr = glm::vec2(glyph->boundingBox[2], glyph->boundingBox[3]);
-            float w2 = tr.x - bl.x;
-            float h2 = tr.y - bl.y;
-            float sx = w1/w2; float sy = h1/h2;
-            glm::vec2 middle = (bl + tr) / (float) 2;
-            glyph->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-1*middle.x, -1*middle.y, 0.f)));
-            glyph->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f)));
-            glyph->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % 9) * w1, corners[1].y - h1/2.f - (i / 9) * h1, 0.1f)));
+    for (int i = 0; i < 27; ++i) {
+        auto glyph = fontManager->get(i);
+        if (glyph != nullptr) {
             glyphContainer.push_back(glyph);
             renderer.addMesh(glyph, &glyphProgram);
         }
+    }
+    for (auto square : display) {
+        renderer.addMesh(square);
+        square->setOnClick([&, window, i, fontManager](std::weak_ptr<Shape> theIcon) {
+            fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, std::to_string(i), icons, bHidden, bAlreadyClicked, glyphContainer, fontManager);
+        });
         ++i;
     }
 }
 
 
-void renderGPUSplineStudy(GLFWwindow* window) {
+void renderFontEngine(GLFWwindow* window) {
     ShaderProgram splineCurveProgram;
     splineCurveProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinecurvetcs.glsl", getShaderDirectory() + "beziertes.glsl", getShaderDirectory() + "splinefs.glsl");
     ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
@@ -1282,11 +1160,12 @@ void renderGPUSplineStudy(GLFWwindow* window) {
     int nCurveClicks = 0; int nBezierPaths = 0;
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], 20, 20));
-//    fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, relation, bezierPaths, nCurveClicks, nBezierPaths, grid);
     //define the dimensions of the 27 squares that make up the 9x3 display.
     float width = corners[1].x - corners[0].x;
     float height = corners[1].y - corners[0].y;
     std::vector<std::shared_ptr<Shape>> menuDisplay{};
+    std::array<std::function<void(std::shared_ptr<Glyph>)>, 27> onGlyphReadyCallbacks{};
+    std::vector<std::shared_ptr<Shape>> glyphContainer{};
     for (int i = 0; i < 27; ++i) {
         auto square = SquareBuilder().build();
         square->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(width/9.f,height/3.f,1.f)));
@@ -1294,14 +1173,32 @@ void renderGPUSplineStudy(GLFWwindow* window) {
         float f = (float)i / 100.f;
         square->setColour(glm::vec3(f, f, f));
         menuDisplay.push_back(square);
+        std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
+            std::vector<glm::vec3> corners = camera.fovThroughOrigin();
+            float w1 = (corners[1].x - corners[0].x) / 9.f;
+            float h1 = (corners[1].y - corners[0].y) / 3.f;
+            glm::vec2 bl = glm::vec2(glyph->boundingBox[0], glyph->boundingBox[1]);
+            glm::vec2 tr = glm::vec2(glyph->boundingBox[2], glyph->boundingBox[3]);
+            float w2 = tr.x - bl.x;
+            float h2 = tr.y - bl.y;
+            float sx = w1/(w2+1.f); float sy = h1/(h2 + 1.f);
+            glm::vec2 middle = (bl + tr) / (float) 2;
+            glyph->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-1*middle.x, -1*middle.y, 0.f)));
+            glyph->updateModellingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f)));
+            glyph->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % 9) * w1, corners[1].y - h1/2.f - (i / 9) * h1, 0.1f)));
+            glyphContainer.push_back(glyph);
+            renderer.addMesh(glyph, &glyphProgram);
+        };
+        onGlyphReadyCallbacks[i] = cb;
     }
+    std::string fontDirectory = getFontDirectory();
+    std::shared_ptr<FontManager> fontManager = FontLoader::loadFont(fontDirectory, onGlyphReadyCallbacks);
     std::vector<std::shared_ptr<Shape>> icons{};
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 5; ++i) {
         icons.push_back(IconBuilder(&camera).build());
     }
     bool bHidden = false; bool bAlreadyClicked = false;
-    std::vector<std::shared_ptr<Shape>> glyphContainer{};
-    fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, relation, bezierPaths, nCurveClicks, nBezierPaths, grid, menuDisplay, icons, bHidden, bAlreadyClicked, glyphContainer);
+    fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, relation, bezierPaths, nCurveClicks, nBezierPaths, grid, menuDisplay, icons, bHidden, bAlreadyClicked, glyphContainer, fontManager);
     picker.enable(window);
     MeshDragger::camera = &camera;
     renderer.buildandrender(window, &camera, &theScene);
@@ -1843,7 +1740,7 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, Renderer::screen_width, Renderer::screen_height);
-    renderGPUSplineStudy(window);
+    renderFontEngine(window);
 
     glfwTerminate();
     return 0;
