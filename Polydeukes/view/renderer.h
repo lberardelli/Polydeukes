@@ -18,6 +18,7 @@
 #include "../model/square.h"
 #include "../model/particle.h"
 #include "../model/sphere.h"
+#include "screenheight.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -43,7 +44,7 @@ private:
     Scene* theScene;
     std::vector<Particle> particles{};
     glm::mat4 view;
-    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)screen_width / (float)screen_height, 0.1f, 1000.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)ScreenHeight::screen_width / (float)ScreenHeight::screen_height, 0.1f, 1000.0f);
     std::function<void()> preRenderCustomization = [] {};
     static float fov;
     
@@ -83,9 +84,6 @@ private:
     };
   
 public:
-    
-    static unsigned int screen_width;
-    static unsigned int screen_height;
     
     Renderer(Scene* theScene, ShaderProgram* defaultProgram): defaultProgram(defaultProgram), theScene(theScene) {}
     

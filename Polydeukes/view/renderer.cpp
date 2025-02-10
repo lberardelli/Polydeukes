@@ -7,6 +7,6 @@
 
 #include "renderer.h"
 
-unsigned int Renderer::screen_width = 1600;
-unsigned int Renderer::screen_height = 900;
+unsigned int ScreenHeight::screen_width = 1600;
+unsigned int ScreenHeight::screen_height = 900;
 float Renderer::fov = 45;

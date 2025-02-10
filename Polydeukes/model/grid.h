@@ -10,6 +10,7 @@
 
 #include "shape.h"
 #include <vector>
+#include "../view/screenheight.h"
 
 class Grid : public Shape {
     
@@ -27,7 +28,8 @@ private:
     
 public:
     
-    Grid(glm::vec3 fovbottomLeft, glm::vec3 fovTopRight, int nHorizontal, int nVertical) {
+    Grid(glm::vec3 fovbottomLeft, glm::vec3 fovTopRight, int nHorizontal) {
+        int nVertical = (float)nHorizontal * ((float)ScreenHeight::screen_width / (float)ScreenHeight::screen_height);
         float horizontalDelta = (fovTopRight.x - fovbottomLeft.x)/(float)nVertical;
         float verticalDelta = (fovTopRight.y - fovbottomLeft.y)/(float)nHorizontal;
         colour = glm::vec3(1.0f,1.0f,1.0f);

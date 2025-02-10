@@ -10,6 +10,7 @@
 
 #include <glm.hpp>
 #include "../view/renderer.h"
+#include "../view/ScreenHeight.h"
 #include "../model/Camera.h"
 #include "../model/Scene.h"
 #include "../model/shape.h"
@@ -146,8 +147,8 @@ public:
     }
     
     static Ray computeMouseRay(int mousePosX, int mousePosY) {
-        float x = (2.0f * mousePosX) / Renderer::screen_width - 1.0f;
-        float y = 1.0f - (2.0f * mousePosY) / Renderer::screen_height;
+        float x = (2.0f * mousePosX) / ScreenHeight::screen_width - 1.0f;
+        float y = 1.0f - (2.0f * mousePosY) / ScreenHeight::screen_height;
         float z = 1.0f;
         glm::vec3 ray_nds = glm::vec3(x, y, z);
         //homogeneous clip coordinates

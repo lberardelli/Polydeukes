@@ -10,7 +10,7 @@
 #include <cmath>
 
 #include "../model/Camera.h"
-#include "../view/renderer.h"
+#include "../view/screenheight.h"
 #include "MouseController.h"
 
 double Arcball::lastMouseX = 0;
@@ -22,7 +22,7 @@ Camera* Arcball::cam{};
     
 glm::vec3 Arcball::calculateVectorToCenterOfArcBall(double xpos, double ypos)
 {
-    glm::vec3 temp((xpos-Renderer::screen_width/2)/(double)Renderer::screen_height/2, (ypos-Renderer::screen_height/2)/(double)Renderer::screen_height/2, 0);
+    glm::vec3 temp((xpos-ScreenHeight::screen_width/2)/(double)ScreenHeight::screen_height/2, (ypos-ScreenHeight::screen_height/2)/(double)ScreenHeight::screen_height/2, 0);
     float rad = temp.x * temp.x + temp.y * temp.y;
     if (rad > 1.0f) {
         float scale = 1.0/std::sqrtf(rad);

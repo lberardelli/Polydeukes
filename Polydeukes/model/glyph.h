@@ -14,6 +14,7 @@
 #include <glad/glad.h>
 #include <thread>
 #include <mutex>
+#include "../view/screenheight.h"
 
 unsigned int GRANULARITY = 100;
 
@@ -64,7 +65,7 @@ private:
     float computeSignedDistance(glm::vec2 p, std::vector<glm::vec4>& edges, int numEdges) {
         float minDist = std::numeric_limits<float>::max();
         bool inside = false;
-
+        int windingNumber = 0;
         for (int i = 0; i < numEdges; ++i) {
             glm::vec2 a = glm::vec2(edges[i].x, edges[i].y);
             glm::vec2 b = glm::vec2(edges[i].z, edges[i].w);
@@ -80,14 +81,59 @@ private:
             minDist = glm::min(minDist, dist);
 
             // Inside-outside test (winding rule)
-            if (((a.y > p.y) != (b.y > p.y)) &&
-                (p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x)) {
-                inside = !inside;
+            if (a.y <= p.y) {
+                if (b.y > p.y && (b.x - a.x) * (p.y - a.y) > (p.x - a.x) * (b.y - a.y))
+                    windingNumber++;
+            } else {
+                if (b.y <= p.y && (b.x - a.x) * (p.y - a.y) < (p.x - a.x) * (b.y - a.y))
+                    windingNumber--;
             }
         }
-
+        inside = (windingNumber != 0);
         // If inside, return positive distance; if outside, return negative
         return inside ? -minDist : minDist;
+    }
+    
+    void init() {
+        glGenTextures(1, &sdfTexture);
+        glBindTexture(GL_TEXTURE_2D, sdfTexture);
+
+        // Allocate storage for the SDF texture
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 128, 128, 0, GL_RED, GL_FLOAT, nullptr);
+
+        // Set texture parameters
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 128, 128, GL_RED, GL_FLOAT, sdfData);
+
+        unsigned int indices[] = {
+            0, 1, 2,
+            2, 3, 0
+        };
+        
+        float quadVertices[] = {
+            boundingBox[0], boundingBox[1],
+            boundingBox[2], boundingBox[1],
+            boundingBox[2], boundingBox[3],
+            boundingBox[0], boundingBox[3]
+        };
+
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glGenBuffers(1, &ebo);
+
+        glBindVertexArray(vao);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
     }
 
 public:
@@ -99,7 +145,7 @@ public:
             init();
             bInitialized = true;
         }
-        shaderProgram.setVec2("resolution", glm::vec2(1600,900));
+        shaderProgram.setVec2("resolution", glm::vec2(ScreenHeight::screen_width,ScreenHeight::screen_height));
         shaderProgram.setVec2("minBounds", glm::vec2(boundingBox[0],boundingBox[1]));
         shaderProgram.setVec2("maxBounds", glm::vec2(boundingBox[2],boundingBox[3]));
         shaderProgram.setMat4("model", modellingTransform);
@@ -167,48 +213,6 @@ public:
         }
     }
     
-    void init() {
-        glGenTextures(1, &sdfTexture);
-        glBindTexture(GL_TEXTURE_2D, sdfTexture);
-
-        // Allocate storage for the SDF texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 128, 128, 0, GL_RED, GL_FLOAT, nullptr);
-
-        // Set texture parameters
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 128, 128, GL_RED, GL_FLOAT, sdfData);
-
-        unsigned int indices[] = {
-            0, 1, 2,
-            2, 3, 0
-        };
-        
-        float quadVertices[] = {
-            boundingBox[0], boundingBox[1],
-            boundingBox[2], boundingBox[1],
-            boundingBox[2], boundingBox[3],
-            boundingBox[0], boundingBox[3]
-        };
-
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-        glGenBuffers(1, &ebo);
-
-        glBindVertexArray(vao);
-
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-    }
-    
 };
 
 class FontLoader;
@@ -225,7 +229,17 @@ private:
     std::vector<GlyphWithIndex> theFont{};
     
     void put(std::shared_ptr<Shape> glyph, int index) {
-        theFont.push_back(GlyphWithIndex(glyph->clone(), index));
+        int eraseIndex = -1;
+        for (int i = 0; i < theFont.size(); ++i) {
+            if (theFont[i].index == index) {
+                eraseIndex = i;
+                break;
+            }
+        }
+        if (eraseIndex >= 0) {
+            theFont.erase(theFont.begin() + eraseIndex);
+        }
+        theFont.push_back(GlyphWithIndex(glyph, index));
     }
     
 public:
@@ -324,6 +338,16 @@ public:
             }).detach();
         }
         return manager;
+    }
+    
+    static std::shared_ptr<Glyph> reloadGlyph(const std::string& pathToFontDirectory, const std::string& fontFile, std::shared_ptr<FontManager> manager) {
+        std::vector<std::vector<std::vector<glm::vec3>>> paths{};
+        std::vector<std::vector<glm::vec2>> worldSpacePaths{};
+        std::string pathToGlyph = pathToFontDirectory + "/" + fontFile;
+        readlbpFontFile(pathToGlyph, paths);
+        auto glyph = computeGlyphFromPaths(paths, worldSpacePaths);
+        manager->put(glyph, std::stoi(fontFile));
+        return glyph;
     }
     
 };
