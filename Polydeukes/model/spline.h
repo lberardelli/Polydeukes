@@ -42,6 +42,14 @@ public:
         }
     }
     
+    void setModelingTransform(glm::mat4&& transform) override {
+        for (int i = 0; i < 12; i+=3) {
+            glm::vec4 tmp = glm::vec4(vertices[i],vertices[i+1],vertices[i+2], 1.f);
+            tmp = transform * tmp;
+            updateLocation(i/3,tmp);
+        }
+    }
+    
     void updateLocation(int i, glm::vec3 newPosition) {
         vertices[i*3] = newPosition.x;
         vertices[i*3+1] = newPosition.y;
@@ -50,7 +58,7 @@ public:
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     }
     
-    virtual std::shared_ptr<Shape> clone() {
+    virtual std::shared_ptr<Shape> clone() override {
         return std::shared_ptr<SplineCurve>(new SplineCurve(VAO, VBO, vertices));
     }
     

@@ -16,6 +16,8 @@
 #include <mutex>
 #include "../view/screenheight.h"
 #include "ttfinterpreter.h"
+#include "spline.h"
+#include "sphere.h"
 
 unsigned int GRANULARITY = 100;
 
@@ -139,6 +141,20 @@ private:
 
 public:
     
+    std::vector<std::shared_ptr<SplineCurve>> contours{};
+    std::vector<std::shared_ptr<Shape>> reifiedControlPoints{};
+    std::vector<std::vector<glm::vec3>> controlPoints{};
+    
+    void setModelingTransform(glm::mat4&& transform) override {
+        Shape::setModelingTransform(transform);
+        for (auto contour : contours) {
+            contour->setModelingTransform(glm::mat4(transform));
+        }
+        for (auto controlPoint : reifiedControlPoints) {
+            controlPoint->updateModellingTransform(std::move(transform));
+        }
+    }
+    
     float boundingBox[4];
     
     virtual void render(ShaderProgram shaderProgram) override {
@@ -163,7 +179,8 @@ public:
         return retval;
     }
     
-    Glyph(const std::vector<std::vector<glm::vec2>>& worldSpaceBezierPaths) {
+    Glyph(const std::vector<std::vector<glm::vec2>>& worldSpaceBezierPaths, std::vector<std::vector<glm::vec3>> controlPoints) {
+        this->controlPoints = controlPoints;
         std::vector<glm::vec4> edges{};
         std::vector<glm::vec2> polygon{};
         for (auto path : worldSpaceBezierPaths) {
@@ -309,20 +326,6 @@ private:
         }
     }
     
-    static std::shared_ptr<Glyph> computeGlyphFromPaths(std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, std::vector<std::vector<glm::vec2>>& worldSpacePaths) {
-        for (auto path : bezierPaths) {
-            std::vector<glm::vec2> worldSpacePath{};
-            for (auto segment : path) {
-                std::vector<glm::vec3> curve = computeBezierCurve(segment);
-                for (auto position : curve) {
-                    worldSpacePath.push_back(position);
-                }
-            }
-            worldSpacePaths.push_back(worldSpacePath);
-        }
-        return std::shared_ptr<Glyph>(new Glyph(worldSpacePaths));
-    }
-    
     struct MissingPoint {
         int index;
         int contour;
@@ -367,14 +370,10 @@ private:
         return missingPoints;
     }
     
+public:
+    
     static std::shared_ptr<Glyph> computeGlyphFromTTFont(TTFont& font, std::vector<glm::vec3> corners , int j) {
         TTFGlyph glyph = font.glyphs[j];
-        if (j == 1) {
-            std::cout << std::endl;
-        }
-        if (j == 11) {
-            std::cout << std::endl;
-        }
         TTFGlyph absGlyph;
         float s = std::min(
             (corners[1].x - corners[0].x) / ((float)font.unitsPerEm),
@@ -384,6 +383,7 @@ private:
         glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
         glm::vec2 prevLocation = glm::vec2(0,0);
         std::vector<Contour> absContours{};
+        std::vector<std::vector<glm::vec3>> controlPoints{};
         for (auto contour : font.glyphs[j].contours) {
             std::vector<Point> absPoints{};
             for (int i = 0; i < contour.points.size(); ++i) {
@@ -391,8 +391,6 @@ private:
                 glm::vec2 currentLocation = glm::vec2(point.xCoord + prevLocation.x, point.yCoord + prevLocation.y);
                 Point absPoint; absPoint.onCurve = point.onCurve; absPoint.xCoord = currentLocation.x; absPoint.yCoord = currentLocation.y;
                 absPoints.push_back(absPoint);
-                glm::vec4 pt = glm::vec4(currentLocation.x, currentLocation.y, 0.f, 1.0f);
-                pt = emToWorld * pt;
                 prevLocation = currentLocation;
             }
             Contour absContour; absContour.points = absPoints;
@@ -464,20 +462,17 @@ private:
                 tmp2.push_back(e);
             }
             worldSpaceBezierPaths.push_back(tmp2);
+            controlPoints.push_back(contourControlPoints);
             contour.clear();
         }
-        auto fill = std::shared_ptr<Glyph>(new Glyph(worldSpaceBezierPaths));
+        auto fill = std::shared_ptr<Glyph>(new Glyph(worldSpaceBezierPaths, controlPoints));
         return fill;
     }
-    
-public:
     
     static std::shared_ptr<FontManager> loadFont(TTFont& font, std::vector<std::function<void(std::shared_ptr<Glyph>)>>& callbacks, std::vector<glm::vec3> corners) {
         std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager());
         for (int i = 0; i < callbacks.size(); ++i) {
             std::thread([&, manager, i, corners]() {
-                std::vector<std::vector<std::vector<glm::vec3>>> paths{};
-                std::vector<std::vector<glm::vec2>> worldSpacePaths{};
                 auto glyph = computeGlyphFromTTFont(font, corners, i);
                 callbacks[i](glyph);
                 manager->put(glyph, i);
@@ -491,9 +486,7 @@ public:
         std::vector<std::vector<glm::vec2>> worldSpacePaths{};
         std::string pathToGlyph = pathToFontDirectory + "/" + fontFile;
         readlbpFontFile(pathToGlyph, paths);
-        auto glyph = computeGlyphFromPaths(paths, worldSpacePaths);
-        manager->put(glyph, std::stoi(fontFile));
-        return glyph;
+        return nullptr;
     }
     
 };
