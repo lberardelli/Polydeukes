@@ -706,103 +706,6 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-// Evaluate a cubic Bezier component at a given parameter u
-float bezierComponent(float P0, float P1, float P2, float P3, float u) {
-    float oneMinusU = 1.0f - u;
-    return oneMinusU * oneMinusU * oneMinusU * P0 +
-           3 * oneMinusU * oneMinusU * u * P1 +
-           3 * oneMinusU * u * u * P2 +
-           u * u * u * P3;
-}
-
-// Solve cubic equation using a robust numerical approach
-std::vector<float> solveCubic(float a3, float a2, float a1, float a0) {
-    std::vector<float> roots;
-
-    // If the leading coefficient is zero, reduce to a quadratic equation
-    if (std::abs(a3) < 1e-6) {
-        if (std::abs(a2) < 1e-6) {
-            if (std::abs(a1) < 1e-6) {
-                return roots; // No solution
-            }
-            // Linear equation: a1 * u + a0 = 0
-            roots.push_back(-a0 / a1);
-        } else {
-            // Quadratic equation: a2 * u^2 + a1 * u + a0 = 0
-            float discriminant = a1 * a1 - 4 * a2 * a0;
-            if (discriminant >= 0) {
-                roots.push_back((-a1 + std::sqrt(discriminant)) / (2 * a2));
-                roots.push_back((-a1 - std::sqrt(discriminant)) / (2 * a2));
-            }
-        }
-    } else {
-        // Use Cardano's method for cubic roots (robust numerical implementation omitted here)
-        // Placeholder for a full cubic solver like Eigen or specialized libraries
-        const int maxIterations = 100;
-        const float tolerance = 1e-6;
-
-        for (float guess = 0.0f; guess <= 1.0f; guess += 0.1f) {
-            float u = guess;
-            for (int iter = 0; iter < maxIterations; ++iter) {
-                float f = a3 * u * u * u + a2 * u * u + a1 * u + a0;
-                float df = 3 * a3 * u * u + 2 * a2 * u + a1;
-
-                if (std::abs(df) < tolerance) break; // Avoid division by zero
-                float nextU = u - f / df;
-                if (std::abs(nextU - u) < tolerance) {
-                    u = nextU;
-                    break;
-                }
-                u = nextU;
-            }
-
-            if (u >= 0.0f && u <= 1.0f) {
-                roots.push_back(u);
-            }
-        }
-    }
-
-    // Deduplicate roots within numerical tolerance
-    std::sort(roots.begin(), roots.end());
-    roots.erase(std::unique(roots.begin(), roots.end(), [&](float a, float b) {
-        return std::abs(a - b) < 1e-6;
-    }), roots.end());
-
-    return roots;
-}
-
-// Find ray-curve intersections
-std::vector<std::pair<float, float>> findIntersections(std::vector<glm::vec3> P, float yRay) {
-    // Compute cubic coefficients for y(u) - yRay = 0
-    float a3 = P[3].y - 3 * P[2].y + 3 * P[1].y - P[0].y;
-    float a2 = 3 * (P[2].y - 2 * P[1].y + P[0].y);
-    float a1 = 3 * (P[1].y - P[0].y);
-    float a0 = P[0].y - yRay;
-
-    // Solve for u
-    std::vector<float> uRoots = solveCubic(a3, a2, a1, a0);
-
-    // Compute (t, u) pairs
-    std::vector<std::pair<float, float>> intersections;
-    for (float u : uRoots) {
-        if (u >= 0.0f && u <= 1.0f) {
-            float x = bezierComponent(P[0].x, P[1].x, P[2].x, P[3].x, u);
-            intersections.emplace_back(x, u);
-        }
-    }
-
-    // Deduplicate intersections by x-coordinate
-    const float tolerance = 1e-6;
-    std::sort(intersections.begin(), intersections.end(), [](const auto& a, const auto& b) {
-        return a.first < b.first;
-    });
-    intersections.erase(std::unique(intersections.begin(), intersections.end(), [&](const auto& a, const auto& b) {
-        return std::abs(a.first - b.first) < tolerance;
-    }), intersections.end());
-
-    return intersections;
-}
-
 glm::vec4 clipToScreenSpace(glm::vec4 clipSpaceCoord, float screenWidth, float screenHeight) {
     glm::vec4 screenSpaceCoord;
     clipSpaceCoord = clipSpaceCoord / clipSpaceCoord.w;
@@ -974,17 +877,21 @@ void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std:
     renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
 }
 
-glm::mat4 getMenuWindowingTransform(Camera& camera, int i, float boundingBox[4]) {
+glm::mat4 getMenuWindowingTransform(Camera& camera, int i, float boundingBox[4], int emSpaceBoundingBox[4], int nHorizontal, int nVertical, float unitsPerEm) {
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
-    float w1 = (corners[1].x - corners[0].x) / 9.f;
-    float h1 = (corners[1].y - corners[0].y) / 3.f;
+    float boxy = corners[1].y - (2 * corners[1].y*(unitsPerEm - ((float)(emSpaceBoundingBox[3] + emSpaceBoundingBox[1])/2.f))/unitsPerEm);
+    float w1 = (corners[1].x - corners[0].x) / (float)nHorizontal;
+    float h1 = (corners[1].y - corners[0].y) / (float)nVertical;
     glm::vec2 bl = glm::vec2(boundingBox[0], boundingBox[1]);
     glm::vec2 tr = glm::vec2(boundingBox[2], boundingBox[3]);
-    float w2 = tr.x - bl.x;
-    float h2 = tr.y - bl.y;
-    float sx = w1/(w2+1.f); float sy = h1/(h2 + 1.f);
+    float w2 = corners[1].x - corners[0].x;
+    float h2 = corners[1].y - corners[0].y;
+    float sx = w1/(w2); float sy = h1/(h2);
     glm::vec2 middle = (bl + tr) / (float) 2;
-    return glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % 9) * w1, corners[1].y - h1/2.f - (i / 9) * h1, 0.1f)) * glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1*middle.x, -1*middle.y, 0.f));
+    if (i == 0) {
+        std::cout << std::endl;
+    }
+    return glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % nHorizontal) * w1, corners[1].y - h1/2.f - (i / nHorizontal) * h1, 0.001f)) * glm::translate(glm::mat4(1.0f), glm::vec3(0, boxy * sy, 0.f)) * glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f));
 }
 
 void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer, std::shared_ptr<FontManager> fontManager);
@@ -1118,7 +1025,7 @@ void fontEditor(ShaderProgram& splineCurveProgram, ShaderProgram& program, Shade
             of.close();
         }
         auto glyph = FontLoader::reloadGlyph(getFontDirectory(), outFileName, fontManager);
-        glyph->setModelingTransform(getMenuWindowingTransform(camera, std::stoi(outFileName), glyph->boundingBox));
+        //glyph->setModelingTransform(getMenuWindowingTransform(camera, std::stoi(outFileName), glyph->boundingBox, 9 ,3, 2048));
         //go back to main menu.
         fontEngineMenu(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, icons, bHidden, bAlreadyClicked, glyphContainer, fontManager);
     });
@@ -1219,11 +1126,22 @@ void ttfInterpreter(GLFWwindow* window) {
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     TTFont font = interpret();
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], font.unitsPerEm / 10.f));
-    for (int j = 4; j < 5; ++j) {
+    for (int j = 0; j < 1; ++j) {
         TTFGlyph glyph = font.glyphs[j];
         TTFGlyph absGlyph;
-        glm::vec2 centre = glm::vec2((glyph.boundingBox[2]-glyph.boundingBox[0])/2.f, (glyph.boundingBox[3] - glyph.boundingBox[1])/2.f);
-        glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3((corners[1].x - corners[0].x)/((float)font.unitsPerEm * 1.1f), (corners[1].y - corners[0].y)/((float)font.unitsPerEm * 1.1f), 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+        float s = std::min(
+            (corners[1].x - corners[0].x) / ((float)font.unitsPerEm),
+            (corners[1].y - corners[0].y) / ((float)font.unitsPerEm)
+        );
+        glm::vec2 centre = glm::vec2((glyph.boundingBox[2]+glyph.boundingBox[0])/2.f, (glyph.boundingBox[3] + glyph.boundingBox[1])/2.f);
+        glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f));
+        glm::vec3 postTranslate = scale * glm::vec4(centre.x, centre.y, 0.f,1.0f);
+        //after translate the viewing area through the origin is the new em.
+        float boxy = corners[1].y - (2 * corners[1].y*((float)font.unitsPerEm - ((float)(glyph.boundingBox[3] + glyph.boundingBox[1])/2.f))/(float)font.unitsPerEm);
+        float boxx = corners[1].x - ((2 * corners[1].x)*((float)font.unitsPerEm - ((float)(glyph.boundingBox[2] - glyph.boundingBox[0])/2.f))/(float)font.unitsPerEm);
+        //need the ratio between em box and space to be same as world box and space.
+        
+        glm::mat4 emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(0., boxy, 0.f)) * scale * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
         glm::vec2 prevLocation = glm::vec2(0,0);
         std::vector<Contour> absContours{};
         for (auto contour : font.glyphs[j].contours) {
@@ -1351,29 +1269,34 @@ void renderFontEngine(GLFWwindow* window) {
     std::vector<std::vector<std::vector<glm::vec3>>> bezierPaths{};
     int nCurveClicks = 0; int nBezierPaths = 0;
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
-    auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], 40));
+    TTFont font = interpret();
+    auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], (font.unitsPerEm/10)));
     //define the dimensions of the 27 squares that make up the 9x3 display.
     float width = corners[1].x - corners[0].x;
     float height = corners[1].y - corners[0].y;
     std::vector<std::shared_ptr<Shape>> menuDisplay{};
-    std::array<std::function<void(std::shared_ptr<Glyph>)>, 27> onGlyphReadyCallbacks{};
+    long nSquares = font.glyphs.size();
+    std::vector<std::function<void(std::shared_ptr<Glyph>)>> onGlyphReadyCallbacks(font.glyphs.size(),0);
+    nSquares = nSquares + (12 - nSquares % 12);
+    int nHorizontal = 12;
+    int nVertical = nSquares / 12;
     std::vector<std::shared_ptr<Shape>> glyphContainer{};
-    for (int i = 0; i < 27; ++i) {
+    for (int i = 0; i < font.glyphs.size(); ++i) {
         auto square = SquareBuilder().build();
-        square->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(width/9.f,height/3.f,1.f)));
-        square->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + width/18.f + (i % 9) * width/9.f, corners[1].y - height/6.f - (i / 9) * (height / 3.f), 0.f)));
-        float f = (float)i / 100.f;
+        glm::mat4 windowingTransform = glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + width/(nHorizontal * 2.f) + (i % nHorizontal) * width/nHorizontal, corners[1].y - height/(nVertical * 2.f) - (i / nHorizontal) * (height / nVertical), 0.f)) * glm::scale(glm::mat4(1.0f), glm::vec3(width/nHorizontal,height/nVertical,1.f));
+        square->setModelingTransform(windowingTransform);
+        float f = (float)(i % 10) / 10.f;
         square->setColour(glm::vec3(f, f, f));
         menuDisplay.push_back(square);
         std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
-            glyph->setModelingTransform(getMenuWindowingTransform(camera, i, glyph->boundingBox));
+            glyph->setModelingTransform(getMenuWindowingTransform(camera, i, glyph->boundingBox, font.glyphs[i].boundingBox, nHorizontal, nVertical, font.unitsPerEm));
             glyphContainer.push_back(glyph);
             renderer.addMesh(glyph, &glyphProgram);
         };
         onGlyphReadyCallbacks[i] = cb;
     }
     std::string fontDirectory = getFontDirectory();
-    std::shared_ptr<FontManager> fontManager = FontLoader::loadFont(fontDirectory, onGlyphReadyCallbacks);
+    std::shared_ptr<FontManager> fontManager = FontLoader::loadFont(font, onGlyphReadyCallbacks, corners);
     std::vector<std::shared_ptr<Shape>> icons{};
     for (int i = 0; i < 5; ++i) {
         icons.push_back(IconBuilder(&camera).build());
@@ -1929,7 +1852,7 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    ttfInterpreter(window);
+    renderFontEngine(window);
 
     glfwTerminate();
     return 0;

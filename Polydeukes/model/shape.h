@@ -138,6 +138,12 @@ public:
         modellingTransform = transform;
     }
     
+    virtual void setModelingTransform(glm::mat4& transform) {
+        glm::mat4 meshTransform = transform * glm::inverse(modellingTransform);
+        mesh.updatePosition(meshTransform);
+        modellingTransform = transform;
+    }
+    
     virtual void updateModellingTransform(glm::mat4&& transform) {
         setModelingTransform(glm::mat4(transform * modellingTransform));
     }

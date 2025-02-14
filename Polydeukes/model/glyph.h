@@ -15,6 +15,7 @@
 #include <thread>
 #include <mutex>
 #include "../view/screenheight.h"
+#include "ttfinterpreter.h"
 
 unsigned int GRANULARITY = 100;
 
@@ -322,17 +323,162 @@ private:
         return std::shared_ptr<Glyph>(new Glyph(worldSpacePaths));
     }
     
+    struct MissingPoint {
+        int index;
+        int contour;
+        Point point;
+    };
+    
+    static std::vector<MissingPoint> fillMissingPoints(std::vector<Contour>& contours) {
+        //these are quadratic bezier curves so off curve points have multiplicity 2.
+        //if two points in a row are off curve, take the centre point as an on curve point.
+        //if two points in a row are on curve, take the centre point as an off curve point.
+        std::vector<MissingPoint> missingPoints{};
+        int j = 0;
+        for (auto contour : contours) {
+            std::vector<Point> pts = contour.points;
+            for (int i = 1; i < contour.points.size() + 1; ++i) {
+                i = i % pts.size();
+                int prev = i - 1;
+                if (i == 0) {
+                    prev = pts.size() - 1;
+                }
+                if (pts[prev].onCurve) {
+                    if (pts[i].onCurve) {
+                        glm::vec2 position = glm::vec2((pts[i].xCoord + pts[prev].xCoord)/2, (pts[i].yCoord + pts[prev].yCoord)/2);
+                        Point p; p.onCurve = false; p.xCoord = position.x; p.yCoord = position.y;
+                        MissingPoint mp; mp.index = i; mp.point = p; mp.contour = j;
+                        missingPoints.push_back(mp);
+                    }
+                } else {
+                    if (!pts[i].onCurve) {
+                        glm::vec2 position = glm::vec2((pts[i].xCoord + pts[prev].xCoord)/2, (pts[i].yCoord + pts[prev].yCoord)/2);
+                        Point p; p.onCurve = true; p.xCoord = position.x; p.yCoord = position.y;
+                        MissingPoint mp; mp.index = i; mp.point = p; mp.contour = j;
+                        missingPoints.push_back(mp);
+                    }
+                }
+                if (i == 0) {
+                    break;
+                }
+            }
+            ++j;
+        }
+        return missingPoints;
+    }
+    
+    static std::shared_ptr<Glyph> computeGlyphFromTTFont(TTFont& font, std::vector<glm::vec3> corners , int j) {
+        TTFGlyph glyph = font.glyphs[j];
+        if (j == 1) {
+            std::cout << std::endl;
+        }
+        if (j == 11) {
+            std::cout << std::endl;
+        }
+        TTFGlyph absGlyph;
+        float s = std::min(
+            (corners[1].x - corners[0].x) / ((float)font.unitsPerEm),
+            (corners[1].y - corners[0].y) / ((float)font.unitsPerEm)
+        );
+        glm::vec2 centre = glm::vec2((glyph.boundingBox[2]+glyph.boundingBox[0])/2.f, (glyph.boundingBox[3] + glyph.boundingBox[1])/2.f);
+        glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+        glm::vec2 prevLocation = glm::vec2(0,0);
+        std::vector<Contour> absContours{};
+        for (auto contour : font.glyphs[j].contours) {
+            std::vector<Point> absPoints{};
+            for (int i = 0; i < contour.points.size(); ++i) {
+                Point point = contour.points[i];
+                glm::vec2 currentLocation = glm::vec2(point.xCoord + prevLocation.x, point.yCoord + prevLocation.y);
+                Point absPoint; absPoint.onCurve = point.onCurve; absPoint.xCoord = currentLocation.x; absPoint.yCoord = currentLocation.y;
+                absPoints.push_back(absPoint);
+                glm::vec4 pt = glm::vec4(currentLocation.x, currentLocation.y, 0.f, 1.0f);
+                pt = emToWorld * pt;
+                prevLocation = currentLocation;
+            }
+            Contour absContour; absContour.points = absPoints;
+            absContours.push_back(absContour);
+        }
+        std::vector<MissingPoint> missingPoints = fillMissingPoints(absContours);
+        std::vector<Point> contour{};
+        std::vector<std::shared_ptr<SplineCurve>> splines{};
+        std::vector<std::vector<glm::vec2>> worldSpaceBezierPaths{};
+        for (int i = 0; i < absContours.size(); ++i) {
+            std::vector<glm::vec3> contourControlPoints{};
+            for (int k = 0; k < absContours[i].points.size(); ++k) {
+                for (int l = 0; l < missingPoints.size(); ++l) {
+                    if (missingPoints[l].index == k && missingPoints[l].contour == i) {
+                        contour.push_back(missingPoints[l].point);
+                        break;
+                    }
+                }
+                contour.push_back(absContours[i].points[k]);
+            }
+            if (!contour[0].onCurve) {
+                if (!contour[1].onCurve) {
+                    throw std::exception();
+                }
+                for (int k = 1; k < contour.size()-2; k += 2) {
+                    glm::vec3 first = emToWorld * glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
+                    glm::vec3 second = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 third = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 fourth = emToWorld * glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
+                    contourControlPoints.push_back(first);
+                    contourControlPoints.push_back(second);
+                    contourControlPoints.push_back(third);
+                    contourControlPoints.push_back(fourth);
+                }
+                glm::vec3 first = emToWorld * glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f, 1.f);
+                glm::vec3 second = emToWorld * glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 third = emToWorld * glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 fourth = emToWorld * glm::vec4(contour[1].xCoord, contour[1].yCoord, 0.f,1.f);
+                contourControlPoints.push_back(first);
+                contourControlPoints.push_back(second);
+                contourControlPoints.push_back(third);
+                contourControlPoints.push_back(fourth);
+            } else {
+                if (contour[1].onCurve) {
+                    throw std::exception();
+                }
+                for (int k = 0; k < contour.size()-2; k += 2) {
+                    glm::vec3 first = emToWorld * glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
+                    glm::vec3 second = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 third = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 fourth = emToWorld * glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
+                    contourControlPoints.push_back(first);
+                    contourControlPoints.push_back(second);
+                    contourControlPoints.push_back(third);
+                    contourControlPoints.push_back(fourth);
+                }
+                glm::vec3 first = emToWorld * glm::vec4(contour[contour.size()-2].xCoord, contour[contour.size()-2].yCoord, 0.f, 1.f);
+                glm::vec3 second = emToWorld * glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
+                glm::vec3 third = emToWorld * glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
+                glm::vec3 fourth = emToWorld * glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                contourControlPoints.push_back(first);
+                contourControlPoints.push_back(second);
+                contourControlPoints.push_back(third);
+                contourControlPoints.push_back(fourth);
+            }
+            std::vector<glm::vec3> tmp = computeBezierCurve(contourControlPoints);
+            std::vector<glm::vec2> tmp2{};
+            for (auto e : tmp) {
+                tmp2.push_back(e);
+            }
+            worldSpaceBezierPaths.push_back(tmp2);
+            contour.clear();
+        }
+        auto fill = std::shared_ptr<Glyph>(new Glyph(worldSpaceBezierPaths));
+        return fill;
+    }
+    
 public:
     
-    static std::shared_ptr<FontManager> loadFont(const std::string& pathToFontDirectory, std::array<std::function<void(std::shared_ptr<Glyph>)>, 27>& callbacks) {
+    static std::shared_ptr<FontManager> loadFont(TTFont& font, std::vector<std::function<void(std::shared_ptr<Glyph>)>>& callbacks, std::vector<glm::vec3> corners) {
         std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager());
-        for (int i = 0; i < 27; ++i) {
-            std::thread([&, manager, i]() {
+        for (int i = 0; i < callbacks.size(); ++i) {
+            std::thread([&, manager, i, corners]() {
                 std::vector<std::vector<std::vector<glm::vec3>>> paths{};
                 std::vector<std::vector<glm::vec2>> worldSpacePaths{};
-                std::string pathToGlyph = pathToFontDirectory + "/" + std::to_string(i);
-                readlbpFontFile(pathToGlyph, paths);
-                auto glyph = computeGlyphFromPaths(paths, worldSpacePaths);
+                auto glyph = computeGlyphFromTTFont(font, corners, i);
                 callbacks[i](glyph);
                 manager->put(glyph, i);
             }).detach();

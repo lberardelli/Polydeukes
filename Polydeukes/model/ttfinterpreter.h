@@ -93,9 +93,9 @@ struct TTFont {
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/love-days-love-font/LoveDays-2v7Oe.ttf", std::ios::binary); // Open file in binary mode
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/paul-font/Paul-le1V.ttf", std::ios::binary);
     if (!file) {
-        std::cerr << "Error opening file!" << std::endl;
+        std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;
         return font;
     }
@@ -165,6 +165,7 @@ TTFont interpret() {
             }
         }
         std::vector<TTFGlyph> glyphs{};
+        int nEmptyGlyphs = 0;
         for (int k = 0; k < nGlyphs; ++k) {
             if (glyphOffsets[k] == glyphOffsets[k+1]) {
                 std::cout << "Found an empty glyph" << std::endl;
