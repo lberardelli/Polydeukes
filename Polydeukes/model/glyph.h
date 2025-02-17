@@ -471,7 +471,7 @@ public:
     
     static std::shared_ptr<FontManager> loadFont(TTFont& font, std::vector<std::function<void(std::shared_ptr<Glyph>)>>& callbacks, std::vector<glm::vec3> corners) {
         std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager());
-        for (int i = 0; i < callbacks.size(); ++i) {
+        for (int i = 0; i < font.glyphs.size(); ++i) {
             std::thread([&, manager, i, corners]() {
                 auto glyph = computeGlyphFromTTFont(font, corners, i);
                 callbacks[i](glyph);

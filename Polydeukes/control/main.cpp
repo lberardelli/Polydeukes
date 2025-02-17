@@ -1047,15 +1047,6 @@ void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, S
     splineContainer.controlPoints.clear();
     renderer.removeShape(grid);
     glyphContainer.clear();
-    for (int i = 0; i < 27; ++i) {
-        auto glyph = fontManager->get(i);
-        if (glyph != nullptr) {
-            glyphContainer.push_back(glyph);
-            renderer.addMesh(glyph, &glyphProgram);
-        } else {
-            std::cout << "Glyph not ready " << i << std::endl;
-        }
-    }
     for (auto square : display) {
         renderer.addMesh(square);
         square->setOnClick([&, window, i, fontManager](std::weak_ptr<Shape> theIcon) {
@@ -1139,10 +1130,11 @@ void renderFontEngine(GLFWwindow* window) {
     float height = corners[1].y - corners[0].y;
     std::vector<std::shared_ptr<Shape>> menuDisplay{};
     long nSquares = font.glyphs.size();
+    double sqrt  = std::sqrt(nSquares);
+    int nHorizontal = std::ceil(sqrt);
     std::vector<std::function<void(std::shared_ptr<Glyph>)>> onGlyphReadyCallbacks(font.glyphs.size(),0);
-    nSquares = nSquares + (12 - nSquares % 12);
-    int nHorizontal = 12;
-    int nVertical = nSquares / 12;
+    nSquares = nSquares + (nHorizontal - nSquares % nHorizontal);
+    int nVertical = nSquares / nHorizontal;
     std::vector<std::shared_ptr<Shape>> glyphContainer{};
     for (int i = 0; i < font.glyphs.size(); ++i) {
         auto square = SquareBuilder().build();
@@ -1715,7 +1707,7 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    ttfInterpreter(window);
+    renderFontEngine(window);
 
     glfwTerminate();
     return 0;

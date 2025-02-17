@@ -93,7 +93,7 @@ struct TTFont {
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/paul-font/Paul-le1V.ttf", std::ios::binary);
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/oswald/Oswald-Demi-BoldItalic.ttf", std::ios::binary);
     if (!file) {
         std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;
@@ -153,9 +153,9 @@ TTFont interpret() {
         std::vector<unsigned int> glyphOffsets{};
         if (bShortGlyphOffsets) {
             for (int i = 0; i <= nGlyphs; ++i) {
-                unsigned short offset = readUShort(buffer, pointer) * 2;
+                unsigned short offset = readUShort(buffer, pointer);
                 pointer+=2;
-                glyphOffsets.push_back(offset);
+                glyphOffsets.push_back(offset * 2);
             }
         } else {
             for (int i = 0; i <= nGlyphs; ++i) {
@@ -165,18 +165,14 @@ TTFont interpret() {
             }
         }
         std::vector<TTFGlyph> glyphs{};
-        int nEmptyGlyphs = 0;
         for (int k = 0; k < nGlyphs; ++k) {
             if (glyphOffsets[k] == glyphOffsets[k+1]) {
                 std::cout << "Found an empty glyph" << std::endl;
+                glyphs.push_back(TTFGlyph());
                 continue;
             }
             pointer = glyphTableOffset + glyphOffsets[k];
             short nContours = readShort(buffer, pointer);
-            if (nContours < 0) {
-                std::cout << "Found a compound glyph at " << k << " gonna skip for now!" << std::endl;
-                continue;
-            }
             pointer += 2;
             TTFGlyph glyph;
             for (int i = 1; i < 5; ++i) {
@@ -184,100 +180,159 @@ TTFont interpret() {
                 glyph.boundingBox[i-1] = s;
                 pointer += 2;
             }
-            std::vector<unsigned short> contourEndpoints{};
-            for (int i = 5; i < 5 + nContours; ++i) {
-                unsigned short s = readUShort(buffer, pointer);
-                pointer += 2;
-                contourEndpoints.push_back(s);
+            if (nContours < 0) {
+                std::cout << "Found a compound glyph at " << k << " gonna skip for now!" << std::endl;
+                unsigned short flags = readUShort(buffer, pointer); pointer += 2;
+                unsigned short index = readUShort(buffer, pointer); pointer += 2;
+                bool arg_1_2_are_words = flags & 0x1;
+                bool args_are_x_y_values = flags & 0x2;
+                bool round_xy_to_gride = flags & 0x4;
+                bool scale = flags & 0x8;
+                bool more_components = flags & 0x20;
+                bool x_and_y_scale = flags & 0x40;
+                bool two_by_two_transform = flags & 0x80;
+                bool instructions = flags & 0x100;
+                bool use_metrix = flags & 0x200;
+                bool overlap = flags & 0x400;
+                float e = 0.f, f = 0.f;
+                if (arg_1_2_are_words) {
+                    if (args_are_x_y_values) {
+                        e = readShort(buffer,pointer); pointer += 2;
+                        f = readShort(buffer,pointer); pointer += 2;
+                    } else {
+                        unsigned short parentGlyphPoint = readUShort(buffer,pointer); pointer += 2;
+                        unsigned short targetGlyphPoint = readUShort(buffer,pointer); pointer += 2;
+                    }
+                } else {
+                    if (args_are_x_y_values) {
+                        e = readUByte(buffer, pointer); pointer += 1;
+                        f = readUByte(buffer, pointer); pointer += 1;
+                    } else {
+                        unsigned short parentGlyphPoint = readUShort(buffer,pointer); pointer +=1;
+                        unsigned short targetGlyphPoint = readUShort(buffer,pointer); pointer +=1;
+                    }
+                }
+                float a = 1.f; float b = 1.f; float c = 0.f; float d = 0.f;
+                if (scale) {
+                    a = readShort(buffer,pointer); pointer += 2;
+                    b = a;
+                } else if (x_and_y_scale) {
+                    a = readShort(buffer,pointer); pointer +=2;
+                    b = readShort(buffer,pointer); pointer += 2;
+                } else if (two_by_two_transform) {
+                    a = readShort(buffer,pointer); pointer += 2;
+                    b = readShort(buffer,pointer); pointer += 2;
+                    c = readShort(buffer,pointer); pointer += 2;
+                    d = readShort(buffer,pointer); pointer += 2;
+                }
+                float m = std::max(std::abs(a), std::abs(b)); float n = std::max(std::abs(c), std::abs(d));
+                if (std::abs(std::abs(a)-std::abs(c)) <= (33.f/65536.f)) {
+                    m = 2 * m;
+                }
+                if (std::abs(std::abs(b)-std::abs(d)) <= (33.f/65536.f)) {
+                    n = 2 * n;
+                }
+                e = m == 0 ? e : e/m;
+                f = n == 0 ? f : f/n;
+                glm::mat3 transform = glm::mat3(a,c,0.f,b,d,0.f,e/m,f/n,1.f);
+                continue;
             }
-            unsigned short instructionLength = readUShort(buffer, pointer);
-            //skip instructions
-            pointer += 2 + instructionLength;
-            std::vector<unsigned char> flags{};
-            unsigned int endpoint = contourEndpoints[contourEndpoints.size()-1] + 1;
-            int nPointsAccountedFor = 0;
-            std::vector<PointInfo> pointsInfo{};
-            for (unsigned int i = pointer; i < pointer + endpoint; ++i) {
-                PointInfo pointInfo;
-                const uint8_t ON_CURVE = 1 << 0;
-                const uint8_t X_SHORT = 1 << 1;
-                const uint8_t Y_SHORT = 1 << 2;
-                const uint8_t REPEAT = 1 << 3;
-                const uint8_t X_SAME_OR_POSITIVE = 1 << 4;
-                const uint8_t Y_SAME_OR_POSITIVE = 1 << 5;
-                const uint8_t RESERVED_BITS = 0b11000000; // Bits 6-7 should be zero
-                unsigned char flag = readUByte(buffer, i);
-                pointInfo.onCurve = (flag & ON_CURVE);
-                pointInfo.xShort = (flag & X_SHORT);
-                pointInfo.yShort = (flag & Y_SHORT);
-                unsigned char n = 0;
-                if (flag & REPEAT) {
-                    n = readUByte(buffer, i + 1);
-                    nPointsAccountedFor += n;
-                    i += 1; endpoint += (1 - (unsigned int)n);
+            else {
+                std::vector<unsigned short> contourEndpoints{};
+                for (int i = 5; i < 5 + nContours; ++i) {
+                    unsigned short s = readUShort(buffer, pointer);
+                    pointer += 2;
+                    contourEndpoints.push_back(s);
                 }
-                pointInfo.xSame = (flag & X_SAME_OR_POSITIVE);
-                pointInfo.ySame = (flag & Y_SAME_OR_POSITIVE);
-                if (flag & RESERVED_BITS) {
-                    std::cout << " - WARNING: Reserved bits should be zero!" << std::endl;
-                }
-                pointsInfo.push_back(pointInfo);
-                for (int j = 0; j < (int)n; ++j) {
+                unsigned short instructionLength = readUShort(buffer, pointer);
+                //skip instructions
+                pointer += 2 + instructionLength;
+                std::vector<unsigned char> flags{};
+                unsigned int endpoint = contourEndpoints[contourEndpoints.size()-1] + 1;
+                int nPointsAccountedFor = 0;
+                std::vector<PointInfo> pointsInfo{};
+                for (unsigned int i = pointer; i < pointer + endpoint; ++i) {
+                    PointInfo pointInfo;
+                    const uint8_t ON_CURVE = 1 << 0;
+                    const uint8_t X_SHORT = 1 << 1;
+                    const uint8_t Y_SHORT = 1 << 2;
+                    const uint8_t REPEAT = 1 << 3;
+                    const uint8_t X_SAME_OR_POSITIVE = 1 << 4;
+                    const uint8_t Y_SAME_OR_POSITIVE = 1 << 5;
+                    const uint8_t RESERVED_BITS = 0b11000000; // Bits 6-7 should be zero
+                    unsigned char flag = readUByte(buffer, i);
+                    pointInfo.onCurve = (flag & ON_CURVE);
+                    pointInfo.xShort = (flag & X_SHORT);
+                    pointInfo.yShort = (flag & Y_SHORT);
+                    unsigned char n = 0;
+                    if (flag & REPEAT) {
+                        n = readUByte(buffer, i + 1);
+                        nPointsAccountedFor += n;
+                        i += 1; endpoint += (1 - (unsigned int)n);
+                    }
+                    pointInfo.xSame = (flag & X_SAME_OR_POSITIVE);
+                    pointInfo.ySame = (flag & Y_SAME_OR_POSITIVE);
+                    if (flag & RESERVED_BITS) {
+                        std::cout << " - WARNING: Reserved bits should be zero!" << std::endl;
+                    }
                     pointsInfo.push_back(pointInfo);
+                    for (int j = 0; j < (int)n; ++j) {
+                        pointsInfo.push_back(pointInfo);
+                    }
+                    ++nPointsAccountedFor;
                 }
-                ++nPointsAccountedFor;
-            }
-            pointer += endpoint;
-            std::vector<Point> points{};
-            for (int i = 0; i < pointsInfo.size(); ++i) {
-                Point point;
-                point.onCurve = pointsInfo[i].onCurve;
-                int xCoord = 0;
-                if (pointsInfo[i].xShort) {
-                    xCoord = readUByte(buffer, pointer);
-                    if (!pointsInfo[i].xSame) {
-                        xCoord *= -1;
+                pointer += endpoint;
+                std::vector<Point> points{};
+                for (int i = 0; i < pointsInfo.size(); ++i) {
+                    Point point;
+                    point.onCurve = pointsInfo[i].onCurve;
+                    int xCoord = 0;
+                    if (pointsInfo[i].xShort) {
+                        xCoord = readUByte(buffer, pointer);
+                        if (!pointsInfo[i].xSame) {
+                            xCoord *= -1;
+                        }
+                        ++pointer;
+                    } else {
+                        if (pointsInfo[i].xSame) {
+                        }
+                        else {
+                            xCoord = readShort(buffer, pointer);
+                            pointer += 2;
+                        }
                     }
-                    ++pointer;
-                } else {
-                    if (pointsInfo[i].xSame) {
-                    }
-                    else {
-                        xCoord = readShort(buffer, pointer);
-                        pointer += 2;
-                    }
+                    point.xCoord = xCoord;
+                    points.push_back(point);
                 }
-                point.xCoord = xCoord;
-                points.push_back(point);
-            }
-            for (int i = 0; i < pointsInfo.size(); ++i) {
-                int yCoord = 0;
-                if (pointsInfo[i].yShort) {
-                    yCoord = readUByte(buffer, pointer);
-                    if (!pointsInfo[i].ySame) {
-                        yCoord *= -1;
+                for (int i = 0; i < pointsInfo.size(); ++i) {
+                    int yCoord = 0;
+                    if (pointsInfo[i].yShort) {
+                        yCoord = readUByte(buffer, pointer);
+                        if (!pointsInfo[i].ySame) {
+                            yCoord *= -1;
+                        }
+                        ++pointer;
+                    } else {
+                        if (pointsInfo[i].ySame) {
+                        }
+                        else {
+                            yCoord = readShort(buffer, pointer);
+                            pointer += 2;
+                        }
                     }
-                    ++pointer;
-                } else {
-                    if (pointsInfo[i].ySame) {
-                    }
-                    else {
-                        yCoord = readShort(buffer, pointer);
-                        pointer += 2;
-                    }
+                    points[i].yCoord = yCoord;
                 }
-                points[i].yCoord = yCoord;
+                std::vector<Contour> contours{};
+                int prevEndpoint = 0;
+                for (auto endpoint : contourEndpoints) {
+                    std::vector<Point> cp{points.cbegin() + prevEndpoint, points.cbegin() + endpoint + 1};
+                    Contour contour; contour.points = cp;
+                    contours.push_back(contour);
+                    prevEndpoint = endpoint + 1;
+                }
+                glyph.contours = contours;
+                glyphs.push_back(glyph);
             }
-            std::vector<Contour> contours{};
-            int prevEndpoint = 0;
-            for (auto endpoint : contourEndpoints) {
-                std::vector<Point> cp{points.cbegin() + prevEndpoint, points.cbegin() + endpoint + 1};
-                Contour contour; contour.points = cp;
-                contours.push_back(contour);
-                prevEndpoint = endpoint + 1;
-            }
-            glyph.contours = contours;
-            glyphs.push_back(glyph);
         }
         TTFont font; font.glyphs = glyphs; font.unitsPerEm = unitsPerEm;
         return font;

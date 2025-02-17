@@ -109,6 +109,9 @@ public:
     }
     
     void addMesh(std::shared_ptr<Shape> shape, ShaderProgram* program) {
+        if (shape == nullptr) {
+            std::cout << "goon" << std::endl;
+        }
         RenderPackage package{shape, program};
         instructions.push_back(package);
         theScene->addMesh(shape);
@@ -172,7 +175,7 @@ public:
             glEnable(GL_DEPTH_TEST);
             view = camera->viewingTransformation();
             glm::vec3 cameraPosition = camera->getPosition();
-            for (RenderPackage package : instructions) {
+            for (RenderPackage& package : instructions) {
                 package.program->bind();
                 package.program->setMat4("view", view);
                 package.program->setMat4("projection", projection);
