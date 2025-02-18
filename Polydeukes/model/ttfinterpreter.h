@@ -84,16 +84,81 @@ struct Contour {
 
 struct TTFGlyph {
     std::vector<Contour> contours{};
+    int index;
     int boundingBox[4];
+};
+
+struct TTFGlyphAndTransform {
+    unsigned int glyphIndex;
+    glm::mat4 transform;
+};
+
+struct TTFCompoundGlyph {
+    int boundingBox[4];
+    int index;
+    std::vector<TTFGlyphAndTransform> gats{};
 };
 
 struct TTFont {
     std::vector<TTFGlyph> glyphs{};
+    std::vector<TTFCompoundGlyph> compoundGlyphs{};
     unsigned short unitsPerEm;
+    
+    int getNGlyphs() const {
+        return glyphs.size() + compoundGlyphs.size();
+    }
+    
+    //this works because we are putting all simple glyphs in ignoring gaps for compound glyphs.
+    bool isCompound(int i) const {
+        return i >= glyphs.size();
+    }
+    
+    int insertionIndexToGlyphIndex(int i) const {
+        if (isCompound(i)) {
+            return compoundGlyphs[i-glyphs.size()].index;
+        }
+        return glyphs[i].index;
+    }
+    
+    int glyphIndexToInsertionIndex(int i) const {
+        for (int j = 0; j < glyphs.size(); ++j) {
+            if (glyphs[j].index == i) {
+                return j;
+            }
+        }
+        for (int j = 0; j < compoundGlyphs.size(); ++j) {
+            if (compoundGlyphs[j].index == i) {
+                return j + glyphs.size();
+            }
+        }
+        return -1;
+    }
+    
+    TTFGlyph getGlyph(int i) {
+        if (isCompound(i)) {
+            throw std::exception();
+        }
+        return glyphs[i];
+    }
+    
+    TTFCompoundGlyph getCompoundGlyph(int i) {
+        if (!isCompound(i)) {
+            throw std::exception();
+        }
+        return compoundGlyphs[i-glyphs.size()];
+    }
+    
+    int* getEmSpaceBoundingBox(int i) {
+        if (isCompound(i)) {
+            i -= glyphs.size();
+            return compoundGlyphs[i].boundingBox;
+        }
+        return glyphs[i].boundingBox;
+    }
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/oswald/Oswald-Demi-BoldItalic.ttf", std::ios::binary);
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/open-sans/OpenSans-Bold.ttf", std::ios::binary);
     if (!file) {
         std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;
@@ -160,11 +225,12 @@ TTFont interpret() {
         } else {
             for (int i = 0; i <= nGlyphs; ++i) {
                 unsigned int offset = readuint32(buffer, pointer);
-                pointer += 2;
+                pointer += 4;
                 glyphOffsets.push_back(offset);
             }
         }
         std::vector<TTFGlyph> glyphs{};
+        std::vector<TTFCompoundGlyph> compoundGlyphs{};
         for (int k = 0; k < nGlyphs; ++k) {
             if (glyphOffsets[k] == glyphOffsets[k+1]) {
                 std::cout << "Found an empty glyph" << std::endl;
@@ -172,72 +238,82 @@ TTFont interpret() {
                 continue;
             }
             pointer = glyphTableOffset + glyphOffsets[k];
-            short nContours = readShort(buffer, pointer);
-            pointer += 2;
-            TTFGlyph glyph;
-            for (int i = 1; i < 5; ++i) {
-                short s = readShort(buffer, pointer);
-                glyph.boundingBox[i-1] = s;
-                pointer += 2;
-            }
+            short nContours = readShort(buffer, pointer); pointer += 2;
             if (nContours < 0) {
+                TTFCompoundGlyph cg;
+                cg.index = k;
+                for (int i = 1; i < 5; ++i) {
+                    short s = readShort(buffer, pointer);
+                    cg.boundingBox[i-1] = s;
+                    pointer += 2;
+                }
                 std::cout << "Found a compound glyph at " << k << " gonna skip for now!" << std::endl;
-                unsigned short flags = readUShort(buffer, pointer); pointer += 2;
-                unsigned short index = readUShort(buffer, pointer); pointer += 2;
-                bool arg_1_2_are_words = flags & 0x1;
-                bool args_are_x_y_values = flags & 0x2;
-                bool round_xy_to_gride = flags & 0x4;
-                bool scale = flags & 0x8;
-                bool more_components = flags & 0x20;
-                bool x_and_y_scale = flags & 0x40;
-                bool two_by_two_transform = flags & 0x80;
-                bool instructions = flags & 0x100;
-                bool use_metrix = flags & 0x200;
-                bool overlap = flags & 0x400;
-                float e = 0.f, f = 0.f;
-                if (arg_1_2_are_words) {
-                    if (args_are_x_y_values) {
-                        e = readShort(buffer,pointer); pointer += 2;
-                        f = readShort(buffer,pointer); pointer += 2;
+                bool more_components = true;
+                while (more_components) {
+                    unsigned short flags = readUShort(buffer, pointer); pointer += 2;
+                    unsigned short index = readUShort(buffer, pointer); pointer += 2;
+                    bool arg_1_2_are_words = flags & 0x1;
+                    bool args_are_x_y_values = flags & 0x2;
+                    bool round_xy_to_grid = flags & 0x4;
+                    bool scale = flags & 0x8;
+                    more_components = flags & 0x20;
+                    bool x_and_y_scale = flags & 0x40;
+                    bool two_by_two_transform = flags & 0x80;
+                    bool instructions = flags & 0x100;
+                    bool use_metrix = flags & 0x200;
+                    bool overlap = flags & 0x400;
+                    int e = 0, f = 0;
+                    if (arg_1_2_are_words) {
+                        if (args_are_x_y_values) {
+                            e = readShort(buffer,pointer); pointer += 2;
+                            f = readShort(buffer,pointer); pointer += 2;
+                        } else {
+                            unsigned short parentGlyphPoint = readUShort(buffer,pointer); pointer += 2;
+                            unsigned short targetGlyphPoint = readUShort(buffer,pointer); pointer += 2;
+                        }
                     } else {
-                        unsigned short parentGlyphPoint = readUShort(buffer,pointer); pointer += 2;
-                        unsigned short targetGlyphPoint = readUShort(buffer,pointer); pointer += 2;
+                        if (args_are_x_y_values) {
+                            e = static_cast<signed char>(readUByte(buffer, pointer)); pointer += 1;
+                            f = static_cast<signed char>(readUByte(buffer, pointer)); pointer += 1;
+                        } else {
+                            unsigned short parentGlyphPoint = readUShort(buffer,pointer); pointer +=1;
+                            unsigned short targetGlyphPoint = readUShort(buffer,pointer); pointer +=1;
+                        }
                     }
-                } else {
-                    if (args_are_x_y_values) {
-                        e = readUByte(buffer, pointer); pointer += 1;
-                        f = readUByte(buffer, pointer); pointer += 1;
-                    } else {
-                        unsigned short parentGlyphPoint = readUShort(buffer,pointer); pointer +=1;
-                        unsigned short targetGlyphPoint = readUShort(buffer,pointer); pointer +=1;
+                    float a = 1.f; float b = 0.f; float c = 0.f; float d = 1.f;
+                    if (scale) {
+                        a = readShort(buffer,pointer); pointer += 2;
+                        d = a;
+                    } else if (x_and_y_scale) {
+                        a = readShort(buffer,pointer); pointer +=2;
+                        d = readShort(buffer,pointer); pointer += 2;
+                    } else if (two_by_two_transform) {
+                        a = readShort(buffer,pointer); pointer += 2;
+                        b = readShort(buffer,pointer); pointer += 2;
+                        c = readShort(buffer,pointer); pointer += 2;
+                        d = readShort(buffer,pointer); pointer += 2;
                     }
+                    float m = std::max(std::abs(a), std::abs(b)); float n = std::max(std::abs(c), std::abs(d));
+                    if (std::abs(std::abs(a)-std::abs(c)) <= (33.f/65536.f)) {
+                        m = 2 * m;
+                    }
+                    if (std::abs(std::abs(b)-std::abs(d)) <= (33.f/65536.f)) {
+                        n = 2 * n;
+                    }
+                    glm::mat4 transform = glm::mat4(a,c,0.f,0.f,b,d,0.f,0.f,0.f,0.f,0.f,0.f,e/m,f/n,0.f,1.f);
+                    TTFGlyphAndTransform gat; gat.glyphIndex = index; gat.transform = transform;
+                    cg.gats.push_back(gat);
                 }
-                float a = 1.f; float b = 1.f; float c = 0.f; float d = 0.f;
-                if (scale) {
-                    a = readShort(buffer,pointer); pointer += 2;
-                    b = a;
-                } else if (x_and_y_scale) {
-                    a = readShort(buffer,pointer); pointer +=2;
-                    b = readShort(buffer,pointer); pointer += 2;
-                } else if (two_by_two_transform) {
-                    a = readShort(buffer,pointer); pointer += 2;
-                    b = readShort(buffer,pointer); pointer += 2;
-                    c = readShort(buffer,pointer); pointer += 2;
-                    d = readShort(buffer,pointer); pointer += 2;
-                }
-                float m = std::max(std::abs(a), std::abs(b)); float n = std::max(std::abs(c), std::abs(d));
-                if (std::abs(std::abs(a)-std::abs(c)) <= (33.f/65536.f)) {
-                    m = 2 * m;
-                }
-                if (std::abs(std::abs(b)-std::abs(d)) <= (33.f/65536.f)) {
-                    n = 2 * n;
-                }
-                e = m == 0 ? e : e/m;
-                f = n == 0 ? f : f/n;
-                glm::mat3 transform = glm::mat3(a,c,0.f,b,d,0.f,e/m,f/n,1.f);
-                continue;
+                compoundGlyphs.push_back(cg);
             }
             else {
+                TTFGlyph glyph;
+                glyph.index = k;
+                for (int i = 1; i < 5; ++i) {
+                    short s = readShort(buffer, pointer);
+                    glyph.boundingBox[i-1] = s;
+                    pointer += 2;
+                }
                 std::vector<unsigned short> contourEndpoints{};
                 for (int i = 5; i < 5 + nContours; ++i) {
                     unsigned short s = readUShort(buffer, pointer);
@@ -334,7 +410,7 @@ TTFont interpret() {
                 glyphs.push_back(glyph);
             }
         }
-        TTFont font; font.glyphs = glyphs; font.unitsPerEm = unitsPerEm;
+        TTFont font; font.glyphs = glyphs; font.compoundGlyphs = compoundGlyphs; font.unitsPerEm = unitsPerEm;
         return font;
     } else {
         std::cerr << "Error reading file!" << std::endl;

@@ -186,6 +186,10 @@ public:
                 package.program->setVec3("lightPosition", light.position);
                 package.program->setVec3("eye", cameraPosition);
                 previousProgram = package.program;
+                if (package.shape == nullptr) {
+                    std::cout << "WTF" << std::endl;
+                    continue;
+                }
                 package.shape->render(*package.program);
             }
             std::vector<collision> collisions{};

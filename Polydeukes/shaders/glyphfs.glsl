@@ -11,11 +11,12 @@ uniform mat4 projection;
 uniform vec2 resolution;
 uniform float threshold;
 uniform sampler2D sdfTexture;
+uniform vec3 colour;
 
 void main() {
     float sdfValue = texture(sdfTexture, texCoord).r;
     if (sdfValue < threshold) {
-        FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        FragColor = vec4(colour, 1.0);
     } else {
         discard;
     }

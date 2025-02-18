@@ -879,7 +879,6 @@ void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std:
 
 glm::mat4 getMenuWindowingTransform(Camera& camera, int i, float boundingBox[4], int emSpaceBoundingBox[4], int nHorizontal, int nVertical, float unitsPerEm) {
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
-    float boxy = corners[1].y - (2 * corners[1].y*(unitsPerEm - ((float)(emSpaceBoundingBox[3] + emSpaceBoundingBox[1])/2.f))/unitsPerEm);
     float w1 = (corners[1].x - corners[0].x) / (float)nHorizontal;
     float h1 = (corners[1].y - corners[0].y) / (float)nVertical;
     glm::vec2 bl = glm::vec2(boundingBox[0], boundingBox[1]);
@@ -887,7 +886,7 @@ glm::mat4 getMenuWindowingTransform(Camera& camera, int i, float boundingBox[4],
     float w2 = corners[1].x - corners[0].x;
     float h2 = corners[1].y - corners[0].y;
     float sx = w1/(w2); float sy = h1/(h2);
-    return glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % nHorizontal) * w1, corners[1].y - h1/2.f - (i / nHorizontal) * h1, 0.001f)) * glm::translate(glm::mat4(1.0f), glm::vec3(0, boxy * sy, 0.f)) * glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f));
+    return glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + w1/2.f + (i % nHorizontal) * w1, corners[1].y - h1/2.f - (i / nHorizontal) * h1, 0.001f)) * glm::scale(glm::mat4(1.0f), glm::vec3(sx, sy, 0.0f));
 }
 
 void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, ShaderProgram& glyphProgram, Renderer& renderer, Camera& camera, MousePicker& picker, GLFWwindow* window, Arcball& arcball, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineContainer, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths, int& nCurveClicks, int& endOfLastPath, std::shared_ptr<Grid>& grid, std::vector<std::shared_ptr<Shape>>& display, std::vector<std::shared_ptr<Shape>>& icons, bool& bHidden, bool& bAlreadyClicked, std::vector<std::shared_ptr<Shape>>& glyphContainer, std::shared_ptr<FontManager> fontManager);
@@ -1069,12 +1068,15 @@ void ttfInterpreter(GLFWwindow* window) {
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     TTFont font = interpret();
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], font.unitsPerEm / 10.f));
-    for (int j = 11; j < 12; ++j) {
+    int insertionIndex = font.glyphIndexToInsertionIndex(167);
+    for (int j = insertionIndex-1; j < insertionIndex; ++j) {
         auto fill = FontLoader::computeGlyphFromTTFont(font, corners, j);
         renderer.addMesh(fill, &glyphProgram);
         //is there a way to do this natively in glyph init? problem is we can't make opengl calls in thread, and glyph init is slow.
         //tbh the font editor is premature. so i'm just gonna leave this half assed.
-        for (auto contourPoints : fill->controlPoints) {
+        std::vector<std::shared_ptr<SplineCurve>> contours{};
+        std::vector<std::shared_ptr<Shape>> reifiedControlPoints{};
+        for (auto contourPoints : fill->getControlPoints()) {
             for (int j = 0; j < contourPoints.size(); j+=4) {
                 for (int k = 0; k < 4; ++k) {
                     auto sphere = SphereBuilder::getInstance()->build();
@@ -1082,24 +1084,22 @@ void ttfInterpreter(GLFWwindow* window) {
                     if (k == 1 || k == 2) {
                         sphere->setColour(glm::vec3(1.f,0.f,0.f));
                     }
-                    fill->reifiedControlPoints.push_back(sphere);
+                    reifiedControlPoints.push_back(sphere);
                 }
                 glm::vec3 first = contourPoints[j];
                 glm::vec3 second = contourPoints[j+1];
                 glm::vec3 third = contourPoints[j+2];
                 glm::vec3 fourth = contourPoints[j+3];
                 auto spline = std::make_shared<SplineCurve>(SplineCurve(first, second, third, fourth));
-                fill->contours.push_back(spline);
+                contours.push_back(spline);
             }
         }
-        for (auto spline : fill->contours) {
+        for (auto spline : contours) {
             renderer.addMesh(spline, &splineCurveProgram);
         }
-        for (auto s : fill->reifiedControlPoints) {
+        for (auto s : reifiedControlPoints) {
             renderer.addMesh(s);
         }
-        float boxy = corners[1].y - (2 * corners[1].y*((float)font.unitsPerEm - ((float)(font.glyphs[j].boundingBox[3] + font.glyphs[j].boundingBox[1])/2.f))/(float)font.unitsPerEm);
-        fill->setModelingTransform(glm::translate(glm::mat4(1.f), glm::vec3(0.f,boxy,0.f)));
     }
     renderer.addMesh(grid);
     renderer.buildandrender(window, &camera, &theScene);
@@ -1129,14 +1129,15 @@ void renderFontEngine(GLFWwindow* window) {
     float width = corners[1].x - corners[0].x;
     float height = corners[1].y - corners[0].y;
     std::vector<std::shared_ptr<Shape>> menuDisplay{};
-    long nSquares = font.glyphs.size();
+    long nSquares = font.getNGlyphs();
     double sqrt  = std::sqrt(nSquares);
     int nHorizontal = std::ceil(sqrt);
-    std::vector<std::function<void(std::shared_ptr<Glyph>)>> onGlyphReadyCallbacks(font.glyphs.size(),0);
+    std::vector<std::function<void(std::shared_ptr<Glyph>)>> onGlyphReadyCallbacks(font.getNGlyphs(),0);
     nSquares = nSquares + (nHorizontal - nSquares % nHorizontal);
-    int nVertical = nSquares / nHorizontal;
+    long nVertical = nSquares / nHorizontal;
     std::vector<std::shared_ptr<Shape>> glyphContainer{};
-    for (int i = 0; i < font.glyphs.size(); ++i) {
+    std::mutex vec_mutex;
+    for (int i = 0; i < font.getNGlyphs(); ++i) {
         auto square = SquareBuilder().build();
         glm::mat4 windowingTransform = glm::translate(glm::mat4(1.0f), glm::vec3(corners[0].x + width/(nHorizontal * 2.f) + (i % nHorizontal) * width/nHorizontal, corners[1].y - height/(nVertical * 2.f) - (i / nHorizontal) * (height / nVertical), 0.f)) * glm::scale(glm::mat4(1.0f), glm::vec3(width/nHorizontal,height/nVertical,1.f));
         square->setModelingTransform(windowingTransform);
@@ -1144,9 +1145,11 @@ void renderFontEngine(GLFWwindow* window) {
         square->setColour(glm::vec3(f, f, f));
         menuDisplay.push_back(square);
         std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
-            glyph->setModelingTransform(getMenuWindowingTransform(camera, i, glyph->boundingBox, font.glyphs[i].boundingBox, nHorizontal, nVertical, font.unitsPerEm));
+            glyph->setModelingTransform(getMenuWindowingTransform(camera, glyph->getIndex(), glyph->getWorldSpaceBoundingBox(), font.getEmSpaceBoundingBox(i), nHorizontal, nVertical, font.unitsPerEm));
+            vec_mutex.lock();
             glyphContainer.push_back(glyph);
             renderer.addMesh(glyph, &glyphProgram);
+            vec_mutex.unlock();
         };
         onGlyphReadyCallbacks[i] = cb;
     }
