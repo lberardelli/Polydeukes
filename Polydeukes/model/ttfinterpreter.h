@@ -44,6 +44,11 @@ short readShort(std::vector<char>& buffer, int startIndex) {
     return readFword(buffer, startIndex);
 }
 
+float readFloatShort(std::vector<char>& buffer, int startIndex) {
+    short s = readShort(buffer,startIndex);
+    return static_cast<float>(s) / 16384.0f;
+}
+
 unsigned char readUByte(std::vector<char>& buffer, int startIndex) {
     unsigned char retval = buffer[startIndex] & 0xFF;
     return retval;
@@ -158,7 +163,7 @@ struct TTFont {
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/open-sans/OpenSans-Bold.ttf", std::ios::binary);
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/paul-font/Paul-le1V.ttf", std::ios::binary);
     if (!file) {
         std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;
@@ -247,6 +252,9 @@ TTFont interpret() {
                     cg.boundingBox[i-1] = s;
                     pointer += 2;
                 }
+                if (k == 106) {
+                    std::cout << "End";
+                }
                 std::cout << "Found a compound glyph at " << k << " gonna skip for now!" << std::endl;
                 bool more_components = true;
                 while (more_components) {
@@ -262,6 +270,8 @@ TTFont interpret() {
                     bool instructions = flags & 0x100;
                     bool use_metrix = flags & 0x200;
                     bool overlap = flags & 0x400;
+                    bool scaled_offset = flags & 0x800;
+                    bool unscaled_offset = flags & 0x1000;
                     int e = 0, f = 0;
                     if (arg_1_2_are_words) {
                         if (args_are_x_y_values) {
@@ -282,16 +292,18 @@ TTFont interpret() {
                     }
                     float a = 1.f; float b = 0.f; float c = 0.f; float d = 1.f;
                     if (scale) {
-                        a = readShort(buffer,pointer); pointer += 2;
+                        int x = k;
+                        a = readFloatShort(buffer,pointer); pointer += 2;
                         d = a;
                     } else if (x_and_y_scale) {
-                        a = readShort(buffer,pointer); pointer +=2;
-                        d = readShort(buffer,pointer); pointer += 2;
+                        int x = k;
+                        a = readFloatShort(buffer,pointer); pointer +=2;
+                        d = readFloatShort(buffer,pointer); pointer += 2;
                     } else if (two_by_two_transform) {
-                        a = readShort(buffer,pointer); pointer += 2;
-                        b = readShort(buffer,pointer); pointer += 2;
-                        c = readShort(buffer,pointer); pointer += 2;
-                        d = readShort(buffer,pointer); pointer += 2;
+                        a = readFloatShort(buffer,pointer); pointer += 2;
+                        b = readFloatShort(buffer,pointer); pointer += 2;
+                        c = readFloatShort(buffer,pointer); pointer += 2;
+                        d = readFloatShort(buffer,pointer); pointer += 2;
                     }
                     float m = std::max(std::abs(a), std::abs(b)); float n = std::max(std::abs(c), std::abs(d));
                     if (std::abs(std::abs(a)-std::abs(c)) <= (33.f/65536.f)) {
@@ -300,7 +312,15 @@ TTFont interpret() {
                     if (std::abs(std::abs(b)-std::abs(d)) <= (33.f/65536.f)) {
                         n = 2 * n;
                     }
-                    glm::mat4 transform = glm::mat4(a,c,0.f,0.f,b,d,0.f,0.f,0.f,0.f,0.f,0.f,e/m,f/n,0.f,1.f);
+                    float scaleFactor = std::sqrt(std::abs(a * d - b * c));
+                    const float piOver4 = M_PI / 4;
+                    float angle = std::atan2(b, a);
+                    if (std::abs(angle) > 0.000001 && std::abs(angle - std::round(angle / piOver4) * piOver4) < .000001) {
+                        // Rotation is a multiple of pi/4
+                        scaleFactor /= 2;
+                    }
+                    glm::mat3 scaleAndRotHomo = glm::mat3(a,b,0.f,c,d,0.f,0.f,0.f,1.f);
+                    glm::mat4 transform = glm::mat4(a,b,0.f,0.f,c,d,0.f,0.f,0.f,0.f,0.f,0.f,e * m * scaleFactor,f * n * scaleFactor,0.f,1.f);
                     TTFGlyphAndTransform gat; gat.glyphIndex = index; gat.transform = transform;
                     cg.gats.push_back(gat);
                 }

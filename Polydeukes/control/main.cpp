@@ -1038,9 +1038,9 @@ void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, S
     for (auto controlPoint : splineContainer.controlPoints) {
         renderer.removeShape(controlPoint);
     }
-    for (auto glyph : glyphContainer) {
-        renderer.removeShape(glyph);
-    }
+//    for (auto glyph : glyphContainer) {
+//        renderer.removeShape(glyph);
+//    }
     controlPoints.clear();
     splineContainer.splines.clear();
     splineContainer.controlPoints.clear();
@@ -1065,42 +1065,64 @@ void ttfInterpreter(GLFWwindow* window) {
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    camera.enableFreeCameraMovement(window);
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     TTFont font = interpret();
+    int n = font.glyphIndexToInsertionIndex(130);
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], font.unitsPerEm / 10.f));
-    int insertionIndex = font.glyphIndexToInsertionIndex(167);
-    for (int j = insertionIndex-1; j < insertionIndex; ++j) {
-        auto fill = FontLoader::computeGlyphFromTTFont(font, corners, j);
-        renderer.addMesh(fill, &glyphProgram);
-        //is there a way to do this natively in glyph init? problem is we can't make opengl calls in thread, and glyph init is slow.
-        //tbh the font editor is premature. so i'm just gonna leave this half assed.
-        std::vector<std::shared_ptr<SplineCurve>> contours{};
-        std::vector<std::shared_ptr<Shape>> reifiedControlPoints{};
-        for (auto contourPoints : fill->getControlPoints()) {
-            for (int j = 0; j < contourPoints.size(); j+=4) {
-                for (int k = 0; k < 4; ++k) {
-                    auto sphere = SphereBuilder::getInstance()->build();
-                    sphere->setModelingTransform(glm::translate(glm::mat4(1.0f), contourPoints[j+k]) * glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
-                    if (k == 1 || k == 2) {
-                        sphere->setColour(glm::vec3(1.f,0.f,0.f));
-                    }
-                    reifiedControlPoints.push_back(sphere);
-                }
-                glm::vec3 first = contourPoints[j];
-                glm::vec3 second = contourPoints[j+1];
-                glm::vec3 third = contourPoints[j+2];
-                glm::vec3 fourth = contourPoints[j+3];
-                auto spline = std::make_shared<SplineCurve>(SplineCurve(first, second, third, fourth));
-                contours.push_back(spline);
+    int insertionIndex = 557;
+    int j = 0;
+    int i = 0;
+    std::shared_ptr<Glyph> lastFill;
+    std::vector<std::shared_ptr<SplineCurve>> lastCurves;
+    std::vector<std::shared_ptr<Shape>> lastReifiedControlPoints{};
+    auto preRenderCustomization = [&] {
+        ++i;
+        if (i == 5) {
+            ++j;
+            j = font.glyphIndexToInsertionIndex(36);
+            i = 6;
+            renderer.removeShape(lastFill);
+            for (auto& curve : lastCurves) {
+                renderer.removeShape(curve);
             }
+            for (auto& ctrl : lastReifiedControlPoints) {
+                renderer.removeShape(ctrl);
+            }
+            auto fill = FontLoader::computeGlyphFromTTFont(font, corners, j);
+            renderer.addMesh(fill, &glyphProgram);
+            std::vector<std::shared_ptr<SplineCurve>> contours{};
+            std::vector<std::shared_ptr<Shape>> reifiedControlPoints{};
+            for (auto contourPoints : fill->getControlPoints()) {
+                for (int j = 0; j < contourPoints.size(); j+=4) {
+                    for (int k = 0; k < 4; ++k) {
+                        auto sphere = SphereBuilder::getInstance()->build();
+                        sphere->setModelingTransform(glm::translate(glm::mat4(1.0f), contourPoints[j+k]) * glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
+                        if (k == 1 || k == 2) {
+                            sphere->setColour(glm::vec3(1.f,0.f,0.f));
+                        }
+                        reifiedControlPoints.push_back(sphere);
+                    }
+                    glm::vec3 first = contourPoints[j];
+                    glm::vec3 second = contourPoints[j+1];
+                    glm::vec3 third = contourPoints[j+2];
+                    glm::vec3 fourth = contourPoints[j+3];
+                    auto spline = std::make_shared<SplineCurve>(SplineCurve(first, second, third, fourth));
+                    contours.push_back(spline);
+                }
+            }
+            for (auto spline : contours) {
+                renderer.addMesh(spline, &splineCurveProgram);
+            }
+            for (auto s : reifiedControlPoints) {
+                renderer.addMesh(s);
+            }
+            lastCurves = contours;
+            lastReifiedControlPoints = reifiedControlPoints;
+            lastFill = fill;
         }
-        for (auto spline : contours) {
-            renderer.addMesh(spline, &splineCurveProgram);
-        }
-        for (auto s : reifiedControlPoints) {
-            renderer.addMesh(s);
-        }
-    }
+    };
+    renderer.addPreRenderCustomization(preRenderCustomization);
     renderer.addMesh(grid);
     renderer.buildandrender(window, &camera, &theScene);
 }
@@ -1145,7 +1167,7 @@ void renderFontEngine(GLFWwindow* window) {
         square->setColour(glm::vec3(f, f, f));
         menuDisplay.push_back(square);
         std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
-            glyph->setModelingTransform(getMenuWindowingTransform(camera, glyph->getIndex(), glyph->getWorldSpaceBoundingBox(), font.getEmSpaceBoundingBox(i), nHorizontal, nVertical, font.unitsPerEm));
+            glyph->setModelingTransform(getMenuWindowingTransform(camera, glyph->getIndex(), glyph->getWorldSpaceBoundingBox(), glyph->getEmSpaceBoundingBox(), nHorizontal, nVertical, font.unitsPerEm));
             vec_mutex.lock();
             glyphContainer.push_back(glyph);
             renderer.addMesh(glyph, &glyphProgram);
@@ -1710,7 +1732,7 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    renderFontEngine(window);
+    ttfInterpreter(window);
 
     glfwTerminate();
     return 0;

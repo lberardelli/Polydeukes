@@ -2,6 +2,7 @@
 
 in vec2 fragCoord;
 in vec2 texCoord;
+in vec3 fragColour;
 
 out vec4 FragColor;
 
@@ -16,7 +17,7 @@ uniform vec3 colour;
 void main() {
     float sdfValue = texture(sdfTexture, texCoord).r;
     if (sdfValue < threshold) {
-        FragColor = vec4(colour, 1.0);
+        FragColor = vec4(fragColour, 1.0);
     } else {
         discard;
     }

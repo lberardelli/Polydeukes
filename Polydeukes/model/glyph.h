@@ -73,16 +73,16 @@ private:
     GLuint vao, vbo, ebo, sdfTexture;
     int numEdges{};
     bool bInitialized = false;
-    float sdfData[128 * 128]{};
+    float sdfData[32 * 32]{};
     std::vector<std::vector<glm::vec3>> controlPoints{};
     float worldSpaceBoundingBox[4];
     int index = -1;
     
     SimpleGlyph(const SimpleGlyph& that) : Glyph(that), numEdges(that.numEdges), vao(that.vao), vbo(that.vbo), ebo(that.ebo), sdfTexture(that.sdfTexture), bInitialized(that.bInitialized) {
         if (!that.bInitialized) {
-            for (int i = 0; i < 128; ++i) {
-                for (int j = 0; j < 128; ++j) {
-                    sdfData[j * 128 + i] = that.sdfData[j*128 + i];
+            for (int i = 0; i < 32; ++i) {
+                for (int j = 0; j < 32; ++j) {
+                    sdfData[j * 32 + i] = that.sdfData[j*32 + i];
                 }
             }
         }
@@ -129,14 +129,14 @@ private:
         glBindTexture(GL_TEXTURE_2D, sdfTexture);
 
         // Allocate storage for the SDF texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 128, 128, 0, GL_RED, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 32, 32, 0, GL_RED, GL_FLOAT, nullptr);
 
         // Set texture parameters
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 128, 128, GL_RED, GL_FLOAT, sdfData);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 32, 32, GL_RED, GL_FLOAT, sdfData);
 
         unsigned int indices[] = {
             0, 1, 2,
@@ -198,7 +198,7 @@ public:
         shaderProgram.setVec2("minBounds", glm::vec2(worldSpaceBoundingBox[0],worldSpaceBoundingBox[1]));
         shaderProgram.setVec2("maxBounds", glm::vec2(worldSpaceBoundingBox[2],worldSpaceBoundingBox[3]));
         shaderProgram.setVec3("colour", colour);
-        glm::mat4 tmp = modellingTransform * addedTransform * glm::translate(glm::mat4(1.f), glm::vec3(boxx,boxy,0.f));
+        glm::mat4 tmp = modellingTransform * glm::translate(glm::mat4(1.f), glm::vec3(boxx,boxy,0.f)) * addedTransform;
         shaderProgram.setMat4("model", tmp);
         float threshold = 0.f;
         shaderProgram.setFloat("threshold", threshold);
@@ -252,10 +252,10 @@ public:
         
         worldSpaceBoundingBox[0] = minX; worldSpaceBoundingBox[1] = minY; worldSpaceBoundingBox [2] = maxX; worldSpaceBoundingBox[3] = maxY;
         
-        float cellSizeY = (maxY - minY) / 128.f;
-        float cellSizeX = (maxX - minX) / 128.f;
-        for (int i = 0; i < 128; ++i) {
-            for (int j = 0; j < 128; ++j) {
+        float cellSizeY = (maxY - minY) / 32.f;
+        float cellSizeX = (maxX - minX) / 32.f;
+        for (int i = 0; i < 32; ++i) {
+            for (int j = 0; j < 32; ++j) {
                 float worldX = minX + i * cellSizeX;
                 float worldY = minY + j * cellSizeY;
                 glm::vec2 gridPoint = glm::vec2(worldX, worldY);
@@ -263,7 +263,7 @@ public:
                 // Compute SDF value (distance to nearest glyph edge)
                 float sdf = computeSignedDistance(gridPoint, edges, numEdges);
 
-                sdfData[j * 128 + i] = sdf;  // Store in row-major order
+                sdfData[j * 32 + i] = sdf;  // Store in row-major order
             }
         }
     }
@@ -471,6 +471,12 @@ public:
         if (font.isCompound(insertionIndex)) {
             TTFCompoundGlyph cg = font.getCompoundGlyph(insertionIndex);
             std::vector<GlyphAndTransform> gats;
+            float x =
+            (worldSpaceCorners[1].x - worldSpaceCorners[0].x) / ((float)font.unitsPerEm);
+            float y =
+            (worldSpaceCorners[1].y - worldSpaceCorners[0].y) / ((float)font.unitsPerEm);
+            glm::vec2 centre = glm::vec2((cg.boundingBox[2]+cg.boundingBox[0])/2.f, (cg.boundingBox[3] + cg.boundingBox[1])/2.f);
+            glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(x, y, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             for (auto ttfgat : cg.gats) {
                 int ins = font.glyphIndexToInsertionIndex(ttfgat.glyphIndex);
                 int emSpaceBoundingBox[4];
@@ -486,13 +492,6 @@ public:
                         emSpaceBoundingBox[i] = glyph.boundingBox[i];
                     }
                 }
-                //need to transform the transformation itself to world space
-                float x =
-                (worldSpaceCorners[1].x - worldSpaceCorners[0].x) / ((float)font.unitsPerEm);
-                float y =
-                (worldSpaceCorners[1].y - worldSpaceCorners[0].y) / ((float)font.unitsPerEm);
-                glm::vec2 centre = glm::vec2((emSpaceBoundingBox[2]+emSpaceBoundingBox[0])/2.f, (emSpaceBoundingBox[3] + emSpaceBoundingBox[1])/2.f);
-                glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(x, y, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
                 auto subglyph = computeGlyphFromTTFont(font, worldSpaceCorners, font.glyphIndexToInsertionIndex(ttfgat.glyphIndex));
                 GlyphAndTransform gat;
                 gat.transform = ttfgat.transform;
@@ -500,12 +499,6 @@ public:
                 gat.transform[3] = glm::vec4(glm::vec3(emToWorld * glm::vec4(ttfgat.transform[3].x, ttfgat.transform[3].y,ttfgat.transform[3].z,0.f)),1.0f);
                 gats.push_back(gat);
             }
-            float s = std::min(
-                (worldSpaceCorners[1].x - worldSpaceCorners[0].x) / ((float)font.unitsPerEm),
-                (worldSpaceCorners[1].y - worldSpaceCorners[0].y) / ((float)font.unitsPerEm)
-            );
-            glm::vec2 centre = glm::vec2((cg.boundingBox[2]+cg.boundingBox[0])/2.f, (cg.boundingBox[3] + cg.boundingBox[1])/2.f);
-            glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             float worldSpaceBoundingBox[4];
             for (int i = 0; i < 4; ++i) {
                 if (i % 2 == 0) {
