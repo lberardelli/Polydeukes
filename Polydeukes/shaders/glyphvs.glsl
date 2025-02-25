@@ -1,6 +1,6 @@
 #version 410 core
 
-layout(location = 0) in vec2 worldPos;
+layout(location = 0) in vec2 emPos;
 
 out vec2 fragCoord;
 out vec2 texCoord;
@@ -16,12 +16,8 @@ uniform vec2 maxBounds;
 uniform vec2 resolution;
 
 void main() {
-    fragCoord = worldPos;
-    texCoord = (worldPos - minBounds) / (maxBounds - minBounds);
-    gl_Position = projection * view * model * vec4(worldPos.x, worldPos.y, 0.0, 1.0);
-    if (worldPos.x > 10.f) {
-        fragColour = vec3(0.f,1.0f,0.f);
-    } else {
-        fragColour = vec3(1.f,1.f,1.f);
-    }
+    fragCoord = emPos;
+    texCoord = (emPos - minBounds) / (maxBounds - minBounds);
+    gl_Position = projection * view * model * vec4(emPos.x, emPos.y, 0.0, 1.0);
+    fragColour = vec3(0.f,1.0f,0.f);
 }

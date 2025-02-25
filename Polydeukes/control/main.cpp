@@ -877,7 +877,7 @@ void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std:
     renderer.addMesh(splineSurface, &splineSurfaceNormalProgram);
 }
 
-glm::mat4 getMenuWindowingTransform(Camera& camera, int i, float boundingBox[4], int emSpaceBoundingBox[4], int nHorizontal, int nVertical, float unitsPerEm) {
+glm::mat4 getMenuWindowingTransform(Camera& camera, int i, float boundingBox[4], int nHorizontal, int nVertical, float unitsPerEm) {
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     float w1 = (corners[1].x - corners[0].x) / (float)nHorizontal;
     float h1 = (corners[1].y - corners[0].y) / (float)nVertical;
@@ -1078,10 +1078,11 @@ void ttfInterpreter(GLFWwindow* window) {
     std::vector<std::shared_ptr<Shape>> lastReifiedControlPoints{};
     auto preRenderCustomization = [&] {
         ++i;
-        if (i == 5) {
+        if (i == 3) {
             ++j;
-            j = font.glyphIndexToInsertionIndex(36);
-            i = 6;
+            j = j % font.getNGlyphs();
+            //j = font.glyphIndexToInsertionIndex(115);
+            i = 0;
             renderer.removeShape(lastFill);
             for (auto& curve : lastCurves) {
                 renderer.removeShape(curve);
@@ -1089,7 +1090,18 @@ void ttfInterpreter(GLFWwindow* window) {
             for (auto& ctrl : lastReifiedControlPoints) {
                 renderer.removeShape(ctrl);
             }
-            auto fill = FontLoader::computeGlyphFromTTFont(font, corners, j);
+            auto fill = FontLoader::computeGlyphFromTTFont(font, j);
+            float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
+            float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
+            float s = std::min(x,y);
+            glm::vec2 centre = glm::vec2((fill->getEmSpaceBoundingBox()[2]+fill->getEmSpaceBoundingBox()[0])/2.f, (fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f);
+            float boxy;
+            float boxx;
+            boxy = corners[1].y - (2 * corners[1].y*((float)font.unitsPerEm - ((float)(fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f))/(float)font.unitsPerEm);
+            boxx = corners[1].x - (2 * corners[1].x*((float)font.unitsPerEm - ((float)(fill->getEmSpaceBoundingBox()[2] + fill->getEmSpaceBoundingBox()[0])/2.f))/(float)font.unitsPerEm);
+            
+            glm::mat4 emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+            fill->setModelingTransform(std::move(emToWorld));
             renderer.addMesh(fill, &glyphProgram);
             std::vector<std::shared_ptr<SplineCurve>> contours{};
             std::vector<std::shared_ptr<Shape>> reifiedControlPoints{};
@@ -1167,7 +1179,26 @@ void renderFontEngine(GLFWwindow* window) {
         square->setColour(glm::vec3(f, f, f));
         menuDisplay.push_back(square);
         std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
-            glyph->setModelingTransform(getMenuWindowingTransform(camera, glyph->getIndex(), glyph->getWorldSpaceBoundingBox(), glyph->getEmSpaceBoundingBox(), nHorizontal, nVertical, font.unitsPerEm));
+            glm::vec2 centre = glm::vec2((glyph->getEmSpaceBoundingBox()[2]+glyph->getEmSpaceBoundingBox()[0])/2.f, (glyph->getEmSpaceBoundingBox()[3] + glyph->getEmSpaceBoundingBox()[1])/2.f);
+            float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
+            float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
+            float s = std::min(x,y);
+            float boxy;
+            float boxx;
+            boxy = corners[1].y - (2 * corners[1].y*((float)font.unitsPerEm - ((float)(glyph->getEmSpaceBoundingBox()[3] + glyph->getEmSpaceBoundingBox()[1])/2.f))/(float)font.unitsPerEm);
+            boxx = corners[1].x - (2 * corners[1].x*((float)font.unitsPerEm - ((float)(glyph->getEmSpaceBoundingBox()[2] + glyph->getEmSpaceBoundingBox()[0])/2.f))/(float)font.unitsPerEm);
+            
+            glm::mat4 emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+            float worldSpaceBoundingBox[4];
+            for (int i = 0; i < 4; ++i) {
+                if (i % 2 == 0) {
+                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(glyph->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
+                }
+                else {
+                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, glyph->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
+                }
+            }
+            glyph->setModelingTransform(getMenuWindowingTransform(camera, glyph->getIndex(), worldSpaceBoundingBox, nHorizontal, nVertical, font.unitsPerEm) * emToWorld);
             vec_mutex.lock();
             glyphContainer.push_back(glyph);
             renderer.addMesh(glyph, &glyphProgram);
@@ -1732,7 +1763,7 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    ttfInterpreter(window);
+    renderFontEngine(window);
 
     glfwTerminate();
     return 0;

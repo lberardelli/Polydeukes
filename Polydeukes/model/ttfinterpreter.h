@@ -163,7 +163,7 @@ struct TTFont {
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/paul-font/Paul-le1V.ttf", std::ios::binary);
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/Times New Roman.ttf", std::ios::binary);
     if (!file) {
         std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;
@@ -252,7 +252,7 @@ TTFont interpret() {
                     cg.boundingBox[i-1] = s;
                     pointer += 2;
                 }
-                if (k == 106) {
+                if (k == 105) {
                     std::cout << "End";
                 }
                 std::cout << "Found a compound glyph at " << k << " gonna skip for now!" << std::endl;
@@ -317,10 +317,10 @@ TTFont interpret() {
                     float angle = std::atan2(b, a);
                     if (std::abs(angle) > 0.000001 && std::abs(angle - std::round(angle / piOver4) * piOver4) < .000001) {
                         // Rotation is a multiple of pi/4
-                        scaleFactor /= 2;
+                        scaleFactor *= 2;
                     }
                     glm::mat3 scaleAndRotHomo = glm::mat3(a,b,0.f,c,d,0.f,0.f,0.f,1.f);
-                    glm::mat4 transform = glm::mat4(a,b,0.f,0.f,c,d,0.f,0.f,0.f,0.f,0.f,0.f,e * m * scaleFactor,f * n * scaleFactor,0.f,1.f);
+                    glm::mat4 transform = glm::mat4(a,b,0.f,0.f,c,d,0.f,0.f,0.f,0.f,0.f,0.f,e ,f,0.f,1.f);
                     TTFGlyphAndTransform gat; gat.glyphIndex = index; gat.transform = transform;
                     cg.gats.push_back(gat);
                 }

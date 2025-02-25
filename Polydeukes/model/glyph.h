@@ -47,7 +47,6 @@ std::vector<glm::vec3> computeBezierCurve(std::vector<glm::vec3>& controlPoints)
 class Glyph : public Shape {
 public:
     virtual std::vector<std::vector<glm::vec3>> getControlPoints() = 0;
-    virtual float* getWorldSpaceBoundingBox() = 0;
     virtual int* getEmSpaceBoundingBox() {
         return emSpaceBoundingBox;
     }
@@ -56,12 +55,6 @@ public:
     virtual int getIndex() const = 0;
     glm::mat4 addedTransform = glm::mat4(1.0f);
     int emSpaceBoundingBox[4];
-    float boxy;
-    float boxx;
-    void setWindowingTransform(int unitsPerEm, std::vector<glm::vec3> corners) {
-        boxy = corners[1].y - (2 * corners[1].y*((float)unitsPerEm - ((float)(emSpaceBoundingBox[3] + emSpaceBoundingBox[1])/2.f))/(float)unitsPerEm);
-        boxx = corners[1].x - (2 * corners[1].x*((float)unitsPerEm - ((float)(emSpaceBoundingBox[2] + emSpaceBoundingBox[0])/2.f))/(float)unitsPerEm);
-    }
     virtual void addTransform(glm::mat4 add) {
         addedTransform = add;
     }
@@ -75,7 +68,6 @@ private:
     bool bInitialized = false;
     float sdfData[32 * 32]{};
     std::vector<std::vector<glm::vec3>> controlPoints{};
-    float worldSpaceBoundingBox[4];
     int index = -1;
     
     SimpleGlyph(const SimpleGlyph& that) : Glyph(that), numEdges(that.numEdges), vao(that.vao), vbo(that.vbo), ebo(that.ebo), sdfTexture(that.sdfTexture), bInitialized(that.bInitialized) {
@@ -85,9 +77,6 @@ private:
                     sdfData[j * 32 + i] = that.sdfData[j*32 + i];
                 }
             }
-        }
-        for (int i = 0; i < 4; ++i) {
-            worldSpaceBoundingBox[i] = that.worldSpaceBoundingBox[i];
         }
         index = that.index;
     }
@@ -143,11 +132,11 @@ private:
             2, 3, 0
         };
         
-        float quadVertices[] = {
-            worldSpaceBoundingBox[0], worldSpaceBoundingBox[1],
-            worldSpaceBoundingBox[2], worldSpaceBoundingBox[1],
-            worldSpaceBoundingBox[2], worldSpaceBoundingBox[3],
-            worldSpaceBoundingBox[0], worldSpaceBoundingBox[3]
+        int quadVertices[] = {
+            emSpaceBoundingBox[0], emSpaceBoundingBox[1],
+            emSpaceBoundingBox[2], emSpaceBoundingBox[1],
+            emSpaceBoundingBox[2], emSpaceBoundingBox[3],
+            emSpaceBoundingBox[0], emSpaceBoundingBox[3]
         };
 
         glGenVertexArrays(1, &vao);
@@ -162,7 +151,7 @@ private:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 2, GL_INT, GL_FALSE, 2 * sizeof(int), (void*)0);
         glEnableVertexAttribArray(0);
     }
 
@@ -176,14 +165,11 @@ public:
         return index;
     }
     
-    float* getWorldSpaceBoundingBox() override {
-        return worldSpaceBoundingBox;
-    }
-    
     void setModelingTransform(glm::mat4&& transform) override {
         Shape::setModelingTransform(transform);
         for (auto& spline : controlPoints) {
             for (auto& controlPoint : spline) {
+                std::cout << controlPoint.x << ", " << controlPoint.y << ", " << controlPoint.z << std::endl;
                 controlPoint = transform * glm::vec4(controlPoint.x,controlPoint.y,controlPoint.z,1.f);
             }
         }
@@ -195,10 +181,10 @@ public:
             bInitialized = true;
         }
         shaderProgram.setVec2("resolution", glm::vec2(ScreenHeight::screen_width,ScreenHeight::screen_height));
-        shaderProgram.setVec2("minBounds", glm::vec2(worldSpaceBoundingBox[0],worldSpaceBoundingBox[1]));
-        shaderProgram.setVec2("maxBounds", glm::vec2(worldSpaceBoundingBox[2],worldSpaceBoundingBox[3]));
+        shaderProgram.setVec2("minBounds", glm::vec2(emSpaceBoundingBox[0],emSpaceBoundingBox[1]));
+        shaderProgram.setVec2("maxBounds", glm::vec2(emSpaceBoundingBox[2],emSpaceBoundingBox[3]));
         shaderProgram.setVec3("colour", colour);
-        glm::mat4 tmp = modellingTransform * glm::translate(glm::mat4(1.f), glm::vec3(boxx,boxy,0.f)) * addedTransform;
+        glm::mat4 tmp = modellingTransform * addedTransform;
         shaderProgram.setMat4("model", tmp);
         float threshold = 0.f;
         shaderProgram.setFloat("threshold", threshold);
@@ -213,21 +199,15 @@ public:
         return retval;
     }
     
-    SimpleGlyph(const std::vector<std::vector<glm::vec2>>& worldSpaceBezierPaths, std::vector<std::vector<glm::vec3>> controlPoints, int index, int* emSpaceBoundingBox, int unitsPerEm, std::vector<glm::vec3> worldSpaceCorners) : index(index)
+    SimpleGlyph(const std::vector<std::vector<glm::vec2>>& emSpaceBezierPaths, std::vector<std::vector<glm::vec3>> controlPoints, int index, int* emSpaceBoundingBox, int unitsPerEm) : index(index)
     {
         for (int i = 0; i < 4; ++i) {
             this->emSpaceBoundingBox[i] = emSpaceBoundingBox[i];
         }
-        setWindowingTransform(unitsPerEm, worldSpaceCorners);
-        for (auto& spline : controlPoints) {
-            for (auto& controlPoint : spline) {
-                controlPoint = glm::translate(glm::mat4(1.0f), glm::vec3(boxx,boxy,0.f)) * glm::vec4(controlPoint, 1.0f);
-            }
-        }
         this->controlPoints = controlPoints;
         std::vector<glm::vec4> edges{};
         std::vector<glm::vec2> polygon{};
-        for (auto path : worldSpaceBezierPaths) {
+        for (auto path : emSpaceBezierPaths) {
             for (int i = 0; i < path.size(); ++i) {
                 int next = i + 1;
                 if (i == path.size()-1) {
@@ -249,16 +229,14 @@ public:
             maxX = std::max(maxX, vertex.x);
             maxY = std::max(maxY, vertex.y);
         }
-        
-        worldSpaceBoundingBox[0] = minX; worldSpaceBoundingBox[1] = minY; worldSpaceBoundingBox [2] = maxX; worldSpaceBoundingBox[3] = maxY;
-        
+                
         float cellSizeY = (maxY - minY) / 32.f;
         float cellSizeX = (maxX - minX) / 32.f;
         for (int i = 0; i < 32; ++i) {
             for (int j = 0; j < 32; ++j) {
-                float worldX = minX + i * cellSizeX;
-                float worldY = minY + j * cellSizeY;
-                glm::vec2 gridPoint = glm::vec2(worldX, worldY);
+                float emX = minX + i * cellSizeX;
+                float emY = minY + j * cellSizeY;
+                glm::vec2 gridPoint = glm::vec2(emX, emY);
 
                 // Compute SDF value (distance to nearest glyph edge)
                 float sdf = computeSignedDistance(gridPoint, edges, numEdges);
@@ -279,13 +257,12 @@ struct GlyphAndTransform {
 class CompoundGlyph : public Glyph {
 private:
     std::vector<GlyphAndTransform> childGlyphs{};
-    float boundingBox[4];
     int index = -1;
 public:
     
-    CompoundGlyph(std::vector<GlyphAndTransform> glyphs, float boundingBox[4], int index) : childGlyphs(glyphs), index(index) {
+    CompoundGlyph(std::vector<GlyphAndTransform> glyphs, int boundingBox[4], int index) : childGlyphs(glyphs), index(index) {
         for (int i = 0; i < 4; ++i) {
-            this->boundingBox[i] = boundingBox[i];
+            this->emSpaceBoundingBox[i] = boundingBox[i];
         }
     }
     
@@ -306,10 +283,6 @@ public:
             retval.insert(retval.end(), ctrlPoints.begin(), ctrlPoints.end());
         }
         return retval;
-    }
-    
-    virtual float* getWorldSpaceBoundingBox() override {
-        return boundingBox;
     }
     
     void setModelingTransform(glm::mat4&& transform) override {
@@ -467,16 +440,10 @@ private:
     
 public:
     
-    static std::shared_ptr<Glyph> computeGlyphFromTTFont(TTFont& font, std::vector<glm::vec3> worldSpaceCorners , int insertionIndex, int xOffset = 0, int yOffset = 0) {
+    static std::shared_ptr<Glyph> computeGlyphFromTTFont(TTFont& font, int insertionIndex) {
         if (font.isCompound(insertionIndex)) {
             TTFCompoundGlyph cg = font.getCompoundGlyph(insertionIndex);
             std::vector<GlyphAndTransform> gats;
-            float x =
-            (worldSpaceCorners[1].x - worldSpaceCorners[0].x) / ((float)font.unitsPerEm);
-            float y =
-            (worldSpaceCorners[1].y - worldSpaceCorners[0].y) / ((float)font.unitsPerEm);
-            glm::vec2 centre = glm::vec2((cg.boundingBox[2]+cg.boundingBox[0])/2.f, (cg.boundingBox[3] + cg.boundingBox[1])/2.f);
-            glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(x, y, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             for (auto ttfgat : cg.gats) {
                 int ins = font.glyphIndexToInsertionIndex(ttfgat.glyphIndex);
                 int emSpaceBoundingBox[4];
@@ -492,39 +459,16 @@ public:
                         emSpaceBoundingBox[i] = glyph.boundingBox[i];
                     }
                 }
-                auto subglyph = computeGlyphFromTTFont(font, worldSpaceCorners, font.glyphIndexToInsertionIndex(ttfgat.glyphIndex));
+                auto subglyph = computeGlyphFromTTFont(font, font.glyphIndexToInsertionIndex(ttfgat.glyphIndex));
                 GlyphAndTransform gat;
                 gat.transform = ttfgat.transform;
                 gat.glyph = subglyph;
-                gat.transform[3] = glm::vec4(glm::vec3(emToWorld * glm::vec4(ttfgat.transform[3].x, ttfgat.transform[3].y,ttfgat.transform[3].z,0.f)),1.0f);
                 gats.push_back(gat);
             }
-            float worldSpaceBoundingBox[4];
-            for (int i = 0; i < 4; ++i) {
-                if (i % 2 == 0) {
-                    glm::vec4 ws = emToWorld * glm::vec4(cg.boundingBox[i],0.f,0.f,1.f);
-                    worldSpaceBoundingBox[i] = ws.x;
-                } else {
-                    glm::vec4 ws = emToWorld * glm::vec4(0.f,cg.boundingBox[i],0.f,1.f);
-                    worldSpaceBoundingBox[i] = ws.y;
-                }
-            }
-            return std::make_shared<CompoundGlyph>(gats, worldSpaceBoundingBox, cg.index);
+            return std::make_shared<CompoundGlyph>(gats, cg.boundingBox, cg.index);
         }
         TTFGlyph glyph = font.glyphs[insertionIndex];
         TTFGlyph absGlyph;
-        float s = std::min(
-            (worldSpaceCorners[1].x - worldSpaceCorners[0].x) / ((float)font.unitsPerEm),
-            (worldSpaceCorners[1].y - worldSpaceCorners[0].y) / ((float)font.unitsPerEm)
-        );
-        glyph.boundingBox[0] += xOffset; glyph.boundingBox[1] += yOffset;
-        glyph.boundingBox[2] += xOffset; glyph.boundingBox[3] += yOffset;
-        for (auto& contour : glyph.contours) {
-            contour.points[0].xCoord += xOffset;
-            contour.points[0].yCoord += yOffset;
-        }
-        glm::vec2 centre = glm::vec2((glyph.boundingBox[2]+glyph.boundingBox[0])/2.f, (glyph.boundingBox[3] + glyph.boundingBox[1])/2.f);
-        glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
         glm::vec2 prevLocation = glm::vec2(0,0);
         std::vector<Contour> absContours{};
         std::vector<std::vector<glm::vec3>> controlPoints{};
@@ -543,7 +487,7 @@ public:
         std::vector<MissingPoint> missingPoints = fillMissingPoints(absContours);
         std::vector<Point> contour{};
         std::vector<std::shared_ptr<SplineCurve>> splines{};
-        std::vector<std::vector<glm::vec2>> worldSpaceBezierPaths{};
+        std::vector<std::vector<glm::vec2>> emSpaceBezierPaths{};
         for (int i = 0; i < absContours.size(); ++i) {
             std::vector<glm::vec3> contourControlPoints{};
             for (int k = 0; k < absContours[i].points.size(); ++k) {
@@ -560,19 +504,19 @@ public:
                     throw std::exception();
                 }
                 for (int k = 1; k < contour.size()-2; k += 2) {
-                    glm::vec3 first = emToWorld * glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
-                    glm::vec3 second = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 third = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 fourth = emToWorld * glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
+                    glm::vec3 first = glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
+                    glm::vec3 second =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 third =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 fourth =  glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
                     contourControlPoints.push_back(first);
                     contourControlPoints.push_back(second);
                     contourControlPoints.push_back(third);
                     contourControlPoints.push_back(fourth);
                 }
-                glm::vec3 first = emToWorld * glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f, 1.f);
-                glm::vec3 second = emToWorld * glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
-                glm::vec3 third = emToWorld * glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
-                glm::vec3 fourth = emToWorld * glm::vec4(contour[1].xCoord, contour[1].yCoord, 0.f,1.f);
+                glm::vec3 first =  glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f, 1.f);
+                glm::vec3 second =  glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 third =  glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 fourth =  glm::vec4(contour[1].xCoord, contour[1].yCoord, 0.f,1.f);
                 contourControlPoints.push_back(first);
                 contourControlPoints.push_back(second);
                 contourControlPoints.push_back(third);
@@ -582,19 +526,19 @@ public:
                     throw std::exception();
                 }
                 for (int k = 0; k < contour.size()-2; k += 2) {
-                    glm::vec3 first = emToWorld * glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
-                    glm::vec3 second = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 third = emToWorld * glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 fourth = emToWorld * glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
+                    glm::vec3 first =  glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
+                    glm::vec3 second =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 third =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
+                    glm::vec3 fourth =  glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
                     contourControlPoints.push_back(first);
                     contourControlPoints.push_back(second);
                     contourControlPoints.push_back(third);
                     contourControlPoints.push_back(fourth);
                 }
-                glm::vec3 first = emToWorld * glm::vec4(contour[contour.size()-2].xCoord, contour[contour.size()-2].yCoord, 0.f, 1.f);
-                glm::vec3 second = emToWorld * glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
-                glm::vec3 third = emToWorld * glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
-                glm::vec3 fourth = emToWorld * glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 first =  glm::vec4(contour[contour.size()-2].xCoord, contour[contour.size()-2].yCoord, 0.f, 1.f);
+                glm::vec3 second =  glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
+                glm::vec3 third =  glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
+                glm::vec3 fourth =  glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
                 contourControlPoints.push_back(first);
                 contourControlPoints.push_back(second);
                 contourControlPoints.push_back(third);
@@ -605,11 +549,11 @@ public:
             for (auto e : tmp) {
                 tmp2.push_back(e);
             }
-            worldSpaceBezierPaths.push_back(tmp2);
+            emSpaceBezierPaths.push_back(tmp2);
             controlPoints.push_back(contourControlPoints);
             contour.clear();
         }
-        auto fill = std::shared_ptr<SimpleGlyph>(new SimpleGlyph(worldSpaceBezierPaths, controlPoints, glyph.index, glyph.boundingBox, font.unitsPerEm, worldSpaceCorners));
+        auto fill = std::shared_ptr<SimpleGlyph>(new SimpleGlyph(emSpaceBezierPaths, controlPoints, glyph.index, glyph.boundingBox, font.unitsPerEm));
         return fill;
     }
     
@@ -618,7 +562,7 @@ public:
         auto vec_mutex_ptr = std::make_shared<std::mutex>();
         for (int i = 0; i < font.getNGlyphs(); ++i) {
             std::thread([&, manager, i, corners,vec_mutex_ptr]() {
-                auto glyph = computeGlyphFromTTFont(font, corners, i);
+                auto glyph = computeGlyphFromTTFont(font, i);
                 callbacks[i](glyph);
                 vec_mutex_ptr->lock();
                 manager->put(glyph, i);
