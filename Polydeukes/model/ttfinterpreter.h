@@ -12,6 +12,7 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
+#include <stdexcept> 
 
 unsigned int readuint32(std::vector<char>& buffer, int startIndex) {
     unsigned int retval = 0;
@@ -91,6 +92,8 @@ struct TTFGlyph {
     std::vector<Contour> contours{};
     int index;
     int boundingBox[4];
+    unsigned short advanceWidth;
+    short leftSideBearing;
 };
 
 struct TTFGlyphAndTransform {
@@ -102,16 +105,33 @@ struct TTFCompoundGlyph {
     int boundingBox[4];
     int index;
     std::vector<TTFGlyphAndTransform> gats{};
+    unsigned short advanceWidth;
+    short leftSideBearing;
 };
 
 struct TTFont {
+public:
     std::vector<TTFGlyph> glyphs{};
     std::vector<TTFCompoundGlyph> compoundGlyphs{};
     unsigned short unitsPerEm;
+    unsigned short mapTableFormat;
+    std::vector<char> mapTableData;
+    
+    void updateGlyphMetrics(unsigned short advanceWidth, short leftSideBearing, int index) {
+        int insertionIndex = glyphIndexToInsertionIndex(index);
+        if (isCompound(insertionIndex)) {
+            compoundGlyphs[insertionIndex-glyphs.size()].advanceWidth = advanceWidth;
+            compoundGlyphs[insertionIndex-glyphs.size()].leftSideBearing = leftSideBearing;
+        } else {
+            glyphs[insertionIndex].advanceWidth = advanceWidth;
+            glyphs[insertionIndex].leftSideBearing = leftSideBearing;
+        }
+    }
     
     int getNGlyphs() const {
         return glyphs.size() + compoundGlyphs.size();
     }
+
     
     //this works because we are putting all simple glyphs in ignoring gaps for compound glyphs.
     bool isCompound(int i) const {
@@ -163,13 +183,13 @@ struct TTFont {
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/Times New Roman.ttf", std::ios::binary);
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/ttf_examples/Times New Roman.ttf", std::ios::binary);
     if (!file) {
         std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;
         return font;
     }
-
+    TTFont font;
     // Get the length of the file
     file.seekg(0, std::ios::end);
     size_t fileSize = file.tellg();
@@ -184,6 +204,9 @@ TTFont interpret() {
     unsigned int headTableOffset = 0;
     unsigned int locaTableOffset = 0;
     unsigned int maxpTableOffset = 0;
+    unsigned int hheaTableOffset = 0;
+    unsigned int hmtxTableOffset = 0;
+    unsigned int cmapTableOffset = 0;
     if (file) {
         std::cout << "File read successfully!" << std::endl;
         // You can now access the raw binary data in the buffer
@@ -206,6 +229,15 @@ TTFont interpret() {
             if (strncmp(firstTableTag, "maxp", 4) == 0) {
                 maxpTableOffset = readuint32(buffer, j * 16 + 20);
             }
+            if (strncmp(firstTableTag, "hhea", 4) == 0) {
+                hheaTableOffset = readuint32(buffer, j * 16 + 20);
+            }
+            if (strncmp(firstTableTag, "hmtx", 4) == 0) {
+                hmtxTableOffset = readuint32(buffer, j * 16 + 20);
+            }
+            if (strncmp(firstTableTag, "cmap", 4) == 0) {
+                cmapTableOffset = readuint32(buffer, j * 16 + 20);
+            }
         }
         std::cout << headTableOffset << " " << locaTableOffset << " " << glyphTableOffset << std::endl;
         unsigned int pointer = headTableOffset;
@@ -219,6 +251,29 @@ TTFont interpret() {
         std::cout << "nGlyphs: " << nGlyphs << std::endl;
         std::cout << "maxPoints: " << readUShort(buffer, pointer + 6) << std::endl;
         std::cout << "maxContours: " << readUShort(buffer, pointer + 8) << std::endl;
+        pointer = hheaTableOffset;
+        unsigned short nHorMetrics = readUShort(buffer, pointer+34);
+        pointer = cmapTableOffset;
+        unsigned short version = readUShort(buffer, pointer); pointer += 2;
+        unsigned short nSubTables = readUShort(buffer, pointer); pointer += 2;
+        unsigned int offset = 0;
+        for (int i = 0; i < nSubTables; ++i) {
+            unsigned short platformID = readUShort(buffer, pointer); pointer += 2;
+            unsigned short platformSpecificID = readUShort(buffer, pointer); pointer += 2;
+            unsigned int soffset = readuint32(buffer, pointer); pointer += 4;
+            if (platformID == 3) {
+                offset = soffset;
+            }
+        }
+        if (offset == 0) {
+            throw std::runtime_error("We only support unicode 2.0 for now.");
+        }
+        pointer = cmapTableOffset + offset;
+        unsigned short format = readUShort(buffer, pointer); pointer += 2;
+        font.mapTableFormat = format;
+        unsigned short length = readUShort(buffer, pointer); pointer += 2;
+        std::vector<char> data(buffer.cbegin() + cmapTableOffset + offset, buffer.cbegin() + cmapTableOffset + offset + length);
+        font.mapTableData=data;
         pointer = locaTableOffset;
         std::vector<unsigned int> glyphOffsets{};
         if (bShortGlyphOffsets) {
@@ -239,7 +294,9 @@ TTFont interpret() {
         for (int k = 0; k < nGlyphs; ++k) {
             if (glyphOffsets[k] == glyphOffsets[k+1]) {
                 std::cout << "Found an empty glyph" << std::endl;
-                glyphs.push_back(TTFGlyph());
+                auto ttfG = TTFGlyph();
+                ttfG.index = k;
+                glyphs.push_back(ttfG);
                 continue;
             }
             pointer = glyphTableOffset + glyphOffsets[k];
@@ -252,10 +309,6 @@ TTFont interpret() {
                     cg.boundingBox[i-1] = s;
                     pointer += 2;
                 }
-                if (k == 105) {
-                    std::cout << "End";
-                }
-                std::cout << "Found a compound glyph at " << k << " gonna skip for now!" << std::endl;
                 bool more_components = true;
                 while (more_components) {
                     unsigned short flags = readUShort(buffer, pointer); pointer += 2;
@@ -292,11 +345,9 @@ TTFont interpret() {
                     }
                     float a = 1.f; float b = 0.f; float c = 0.f; float d = 1.f;
                     if (scale) {
-                        int x = k;
                         a = readFloatShort(buffer,pointer); pointer += 2;
                         d = a;
                     } else if (x_and_y_scale) {
-                        int x = k;
                         a = readFloatShort(buffer,pointer); pointer +=2;
                         d = readFloatShort(buffer,pointer); pointer += 2;
                     } else if (two_by_two_transform) {
@@ -312,15 +363,7 @@ TTFont interpret() {
                     if (std::abs(std::abs(b)-std::abs(d)) <= (33.f/65536.f)) {
                         n = 2 * n;
                     }
-                    float scaleFactor = std::sqrt(std::abs(a * d - b * c));
-                    const float piOver4 = M_PI / 4;
-                    float angle = std::atan2(b, a);
-                    if (std::abs(angle) > 0.000001 && std::abs(angle - std::round(angle / piOver4) * piOver4) < .000001) {
-                        // Rotation is a multiple of pi/4
-                        scaleFactor *= 2;
-                    }
-                    glm::mat3 scaleAndRotHomo = glm::mat3(a,b,0.f,c,d,0.f,0.f,0.f,1.f);
-                    glm::mat4 transform = glm::mat4(a,b,0.f,0.f,c,d,0.f,0.f,0.f,0.f,0.f,0.f,e ,f,0.f,1.f);
+                    glm::mat4 transform = glm::mat4(a,b,0.f,0.f,c,d,0.f,0.f,0.f,0.f,0.f,0.f,e,f,0.f,1.f);
                     TTFGlyphAndTransform gat; gat.glyphIndex = index; gat.transform = transform;
                     cg.gats.push_back(gat);
                 }
@@ -430,12 +473,24 @@ TTFont interpret() {
                 glyphs.push_back(glyph);
             }
         }
-        TTFont font; font.glyphs = glyphs; font.compoundGlyphs = compoundGlyphs; font.unitsPerEm = unitsPerEm;
+        font.glyphs = glyphs; font.compoundGlyphs = compoundGlyphs; font.unitsPerEm = unitsPerEm;
+        pointer = hmtxTableOffset;
+        unsigned short lastAdvanceWidth = 0;;
+        for (int i = 0; i < nHorMetrics; ++i) {
+            unsigned short advanceWidth = readUShort(buffer, pointer); pointer += 2;
+            short leftSideBearing = readShort(buffer,pointer); pointer +=2;
+            font.updateGlyphMetrics(advanceWidth, leftSideBearing, i);
+            lastAdvanceWidth = advanceWidth;
+        }
+        for (int i = nHorMetrics; i < font.getNGlyphs(); ++i) {
+            unsigned short advanceWidth = lastAdvanceWidth;
+            short leftSideBearing = readShort(buffer,pointer); pointer +=2;
+            font.updateGlyphMetrics(advanceWidth, leftSideBearing, i);
+        }
         return font;
     } else {
         std::cerr << "Error reading file!" << std::endl;
     }
-    TTFont font;
     file.close();
     return font;
 }

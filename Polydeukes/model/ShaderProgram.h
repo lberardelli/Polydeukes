@@ -21,9 +21,6 @@ class ShaderProgram {
   
 private:
     
-    std::string vertexShaderName;
-    std::string fragmentShaderName;
-    
     std::string readShaderFromFile(std::string& shader) {
         std::string content;
         std::ifstream fileStream(shader, std::ios::in);
@@ -45,6 +42,8 @@ private:
     
 public:
     unsigned int pid;
+    std::string vertexShaderName;
+    std::string fragmentShaderName;
     
     ShaderProgram(std::string vertexShaderName, std::string fragmentShaderName) : vertexShaderName{vertexShaderName}, fragmentShaderName{fragmentShaderName} {}
     

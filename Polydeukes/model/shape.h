@@ -43,6 +43,8 @@ class ShapeBuilder;
 class Shape : public Clickable<Shape> {
     friend ShapeBuilder;
     friend SceneListNode;
+private:
+    static int n_freed_shapes;
 protected:
     Mesh mesh;
     glm::mat4 modellingTransform = glm::mat4(1.0f);
@@ -64,7 +66,7 @@ public:
         return modellingTransform;
     }
     
-    glm::vec3 getPosition() const {
+    virtual glm::vec3 getPosition() const {
         glm::vec4 tmp = glm::vec4(0.0f,0.0f,0.0f,1.0f);
         tmp = modellingTransform * tmp;
         return glm::vec3(tmp.x,tmp.y,tmp.z);

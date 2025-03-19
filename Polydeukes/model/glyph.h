@@ -18,6 +18,7 @@
 #include "ttfinterpreter.h"
 #include "spline.h"
 #include "sphere.h"
+#include <stdexcept>
 
 unsigned int GRANULARITY = 100;
 
@@ -50,14 +51,58 @@ public:
     virtual int* getEmSpaceBoundingBox() {
         return emSpaceBoundingBox;
     }
-    virtual ~Glyph() = default;
+    virtual ~Glyph() {
+    }
     virtual bool isCompound() const { return false; }
     virtual int getIndex() const = 0;
     glm::mat4 addedTransform = glm::mat4(1.0f);
+    int unitsPerEm;
     int emSpaceBoundingBox[4];
+    unsigned short advanceWidth;
+    short leftSideBearing;
     virtual void addTransform(glm::mat4 add) {
         addedTransform = add;
     }
+    
+    virtual glm::vec3 getPosition() const override {
+        float xPos = (emSpaceBoundingBox[2] + emSpaceBoundingBox[0]) / 2.f;
+        float yPos = (emSpaceBoundingBox[3] + emSpaceBoundingBox[1]) / 2.f;
+        glm::vec4 tmp = glm::vec4(xPos,yPos,0.0f,1.0f);
+        tmp = modellingTransform * addedTransform * tmp;
+        return glm::vec3(tmp.x,tmp.y,tmp.z);
+    }
+    
+    void updateModellingTransform(glm::mat4&& transform) override {
+        setModelingTransform(glm::mat4(transform * modellingTransform * addedTransform));
+    }
+    
+    Glyph(const Glyph& that) : Shape(that), addedTransform(that.addedTransform), advanceWidth(that.advanceWidth), unitsPerEm(that.unitsPerEm), leftSideBearing(that.leftSideBearing) {
+        for (int i = 0; i < 4; ++i) {
+            emSpaceBoundingBox[i] = that.emSpaceBoundingBox[i];
+        }
+    }
+    
+    Glyph() { }
+    
+    virtual std::vector<glm::vec3> getAABB() override {
+        float worldSpaceBoundingBox[4];
+        glm::mat4 emToWorld = modellingTransform * addedTransform;
+        for (int i = 0; i < 4; ++i) {
+            if (i % 2 == 0) {
+                worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(emSpaceBoundingBox[i], 0.f,0.f,1.0f)).x;
+            }
+            else {
+                worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f,emSpaceBoundingBox[i],0.f,1.0f)).y;
+            }
+        }
+        float zmax = (emToWorld * glm::vec4(0.f,0.f,-.1f,1.f)).z;
+        float zmin = (emToWorld * glm::vec4(0.f,0.f,.1f,1.f)).z;
+        std::vector<glm::vec3> aabb;
+        aabb.push_back(glm::vec3(worldSpaceBoundingBox[0], worldSpaceBoundingBox[1], zmin));
+        aabb.push_back(glm::vec3(worldSpaceBoundingBox[2], worldSpaceBoundingBox[3], zmax));
+        return aabb;
+    }
+    
 };
 
 
@@ -66,15 +111,15 @@ private:
     GLuint vao, vbo, ebo, sdfTexture;
     int numEdges{};
     bool bInitialized = false;
-    float sdfData[32 * 32]{};
+    float sdfData[64 * 64]{};
     std::vector<std::vector<glm::vec3>> controlPoints{};
     int index = -1;
     
-    SimpleGlyph(const SimpleGlyph& that) : Glyph(that), numEdges(that.numEdges), vao(that.vao), vbo(that.vbo), ebo(that.ebo), sdfTexture(that.sdfTexture), bInitialized(that.bInitialized) {
+    SimpleGlyph(const SimpleGlyph& that) : Glyph(that), numEdges(that.numEdges), vao(that.vao), vbo(that.vbo), ebo(that.ebo), sdfTexture(that.sdfTexture), bInitialized(that.bInitialized), controlPoints(that.controlPoints) {
         if (!that.bInitialized) {
-            for (int i = 0; i < 32; ++i) {
-                for (int j = 0; j < 32; ++j) {
-                    sdfData[j * 32 + i] = that.sdfData[j*32 + i];
+            for (int i = 0; i < 64; ++i) {
+                for (int j = 0; j < 64; ++j) {
+                    sdfData[j * 64 + i] = that.sdfData[j*64 + i];
                 }
             }
         }
@@ -109,7 +154,6 @@ private:
             }
         }
         inside = (windingNumber != 0);
-        // If inside, return positive distance; if outside, return negative
         return inside ? -minDist : minDist;
     }
     
@@ -118,14 +162,14 @@ private:
         glBindTexture(GL_TEXTURE_2D, sdfTexture);
 
         // Allocate storage for the SDF texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 32, 32, 0, GL_RED, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 64, 64, 0, GL_RED, GL_FLOAT, nullptr);
 
         // Set texture parameters
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 32, 32, GL_RED, GL_FLOAT, sdfData);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 64, 64, GL_RED, GL_FLOAT, sdfData);
 
         unsigned int indices[] = {
             0, 1, 2,
@@ -157,6 +201,13 @@ private:
 
 public:
     
+    virtual ~SimpleGlyph() {
+        glDeleteTextures(1, &sdfTexture);
+        glDeleteBuffers(1, &vbo);
+        glDeleteVertexArrays(1, &vao);
+        glDeleteBuffers(1, &ebo);
+    }
+    
     std::vector<std::vector<glm::vec3>> getControlPoints() override {
         return controlPoints;
     }
@@ -169,7 +220,6 @@ public:
         Shape::setModelingTransform(transform);
         for (auto& spline : controlPoints) {
             for (auto& controlPoint : spline) {
-                std::cout << controlPoint.x << ", " << controlPoint.y << ", " << controlPoint.z << std::endl;
                 controlPoint = transform * glm::vec4(controlPoint.x,controlPoint.y,controlPoint.z,1.f);
             }
         }
@@ -183,10 +233,12 @@ public:
         shaderProgram.setVec2("resolution", glm::vec2(ScreenHeight::screen_width,ScreenHeight::screen_height));
         shaderProgram.setVec2("minBounds", glm::vec2(emSpaceBoundingBox[0],emSpaceBoundingBox[1]));
         shaderProgram.setVec2("maxBounds", glm::vec2(emSpaceBoundingBox[2],emSpaceBoundingBox[3]));
-        shaderProgram.setVec3("colour", colour);
+        shaderProgram.setVec3("aColour", colour);
+        float timeValue = glfwGetTime();
+        shaderProgram.setFloat("uTime", timeValue);
         glm::mat4 tmp = modellingTransform * addedTransform;
         shaderProgram.setMat4("model", tmp);
-        float threshold = 0.f;
+        float threshold = 2.f;
         shaderProgram.setFloat("threshold", threshold);
         glBindTexture(GL_TEXTURE_2D, sdfTexture);
         glBindVertexArray(vao);
@@ -199,8 +251,10 @@ public:
         return retval;
     }
     
-    SimpleGlyph(const std::vector<std::vector<glm::vec2>>& emSpaceBezierPaths, std::vector<std::vector<glm::vec3>> controlPoints, int index, int* emSpaceBoundingBox, int unitsPerEm) : index(index)
+    SimpleGlyph(const std::vector<std::vector<glm::vec2>>& emSpaceBezierPaths, std::vector<std::vector<glm::vec3>> controlPoints, int index, int* emSpaceBoundingBox, int unitsPerEm, unsigned short advanceWidth, short leftSideBearing) : index(index)
     {
+        this->advanceWidth = advanceWidth;
+        this->leftSideBearing = leftSideBearing;
         for (int i = 0; i < 4; ++i) {
             this->emSpaceBoundingBox[i] = emSpaceBoundingBox[i];
         }
@@ -230,10 +284,10 @@ public:
             maxY = std::max(maxY, vertex.y);
         }
                 
-        float cellSizeY = (maxY - minY) / 32.f;
-        float cellSizeX = (maxX - minX) / 32.f;
-        for (int i = 0; i < 32; ++i) {
-            for (int j = 0; j < 32; ++j) {
+        float cellSizeY = (maxY - minY) / 64.f;
+        float cellSizeX = (maxX - minX) / 64.f;
+        for (int i = 0; i < 64; ++i) {
+            for (int j = 0; j < 64; ++j) {
                 float emX = minX + i * cellSizeX;
                 float emY = minY + j * cellSizeY;
                 glm::vec2 gridPoint = glm::vec2(emX, emY);
@@ -241,7 +295,7 @@ public:
                 // Compute SDF value (distance to nearest glyph edge)
                 float sdf = computeSignedDistance(gridPoint, edges, numEdges);
 
-                sdfData[j * 32 + i] = sdf;  // Store in row-major order
+                sdfData[j * 64 + i] = sdf;  // Store in row-major order
             }
         }
     }
@@ -260,7 +314,11 @@ private:
     int index = -1;
 public:
     
-    CompoundGlyph(std::vector<GlyphAndTransform> glyphs, int boundingBox[4], int index) : childGlyphs(glyphs), index(index) {
+    virtual ~CompoundGlyph() {}
+    
+    CompoundGlyph(std::vector<GlyphAndTransform> glyphs, int boundingBox[4], int index, unsigned short advanceWidth, short leftSideBearing) : childGlyphs(glyphs), index(index) {
+        this->advanceWidth = advanceWidth;
+        this->leftSideBearing = leftSideBearing;
         for (int i = 0; i < 4; ++i) {
             this->emSpaceBoundingBox[i] = boundingBox[i];
         }
@@ -295,7 +353,7 @@ public:
     void render(ShaderProgram shaderProgram) override {
         for (auto& glyph : childGlyphs) {
             glyph.glyph->setColour(glm::vec3(1.0f,0.0f,0.0f));
-            glyph.glyph->addTransform(glyph.transform);
+            glyph.glyph->addTransform(glyph.transform * addedTransform);
             glyph.glyph->render(shaderProgram);
         }
     }
@@ -306,6 +364,101 @@ class FontLoader;
 class FontManager {
     friend FontLoader;
 private:
+    
+    class CMap {
+        
+        friend FontManager;
+        
+        unsigned short readUShort(const std::vector<char>& buffer, int startIndex) {
+            unsigned short retval = 0;
+            for (int i = startIndex; i < startIndex + 2; ++i) {
+                int pow = 255 * std::pow(16, (2*(1-(i-startIndex))));
+                retval |= ((buffer[i] << (8 * (1-(i - startIndex)))) & pow);
+            }
+            return retval;
+        }
+        
+        unsigned short format;
+        unsigned short length;
+        unsigned short language;
+        unsigned short segCountX2;
+        unsigned short searchRange;
+        unsigned short entrySelector;
+        unsigned short rangeShift;
+        
+        std::vector<unsigned short> endCode;
+        unsigned short reservedPad;   // Always 0
+        std::vector<unsigned short> startCode;
+        std::vector<unsigned short> idDelta;
+        std::vector<unsigned short> idRangeOffset;
+        std::vector<unsigned short> glyphIndexArray;
+
+        CMap(const std::vector<char> buffer) {
+            int pointer = 0;
+            format = readUShort(buffer, pointer); pointer += 2;
+            if (format!=4) {
+                throw std::runtime_error("We only support format 4 for now");
+            }
+            length = readUShort(buffer, pointer); pointer += 2;
+            language = readUShort(buffer, pointer); pointer += 2;
+            segCountX2 = readUShort(buffer, pointer); pointer += 2;
+            searchRange = readUShort(buffer, pointer); pointer += 2;
+            entrySelector = readUShort(buffer, pointer); pointer += 2;
+            rangeShift = readUShort(buffer, pointer); pointer += 2;
+
+            unsigned short segCount = segCountX2 / 2;
+            endCode.resize(segCount);
+            for (int i = 0; i < segCount; ++i) {
+                endCode[i] = readUShort(buffer, pointer); pointer += 2;
+            }
+
+            reservedPad = readUShort(buffer, pointer); pointer += 2;
+
+            startCode.resize(segCount);
+            for (int i = 0; i < segCount; ++i) {
+                startCode[i] = readUShort(buffer, pointer); pointer += 2;
+            }
+
+            idDelta.resize(segCount);
+            for (int i = 0; i < segCount; ++i) {
+                idDelta[i] = readUShort(buffer, pointer); pointer += 2;
+            }
+
+            idRangeOffset.resize(segCount);
+            for (int i = 0; i < segCount; ++i) {
+                idRangeOffset[i] = readUShort(buffer, pointer); pointer += 2;
+            }
+            int glyphArrayStart = pointer;
+            while (pointer < glyphArrayStart + (length - glyphArrayStart)) {
+                glyphIndexArray.push_back(readUShort(buffer, pointer));
+                pointer += 2;
+            }
+        }
+        
+        int get(int codePoint) {
+            int targetInterval = -1;
+            for (int i = 0; i < segCountX2/2; ++i) {
+                if (endCode[i] >= codePoint) {
+                    targetInterval = i;
+                    break;
+                }
+            }
+            if (targetInterval == -1) {
+                return 0;
+            }
+            int sc = startCode[targetInterval];
+            int offset = 0;
+            if (idRangeOffset[targetInterval] == 0) {
+                return (idDelta[targetInterval] + codePoint)  % 65536;
+            }
+            int offsetInBytes = idRangeOffset[targetInterval] + 2 * (codePoint - sc);
+            int nBytesLeft = (idRangeOffset.size() - targetInterval - 1) * 2;
+            offsetInBytes -= nBytesLeft;
+            offset = offsetInBytes / 2; offset -= 1;
+            return glyphIndexArray[offset];
+        }
+    };
+    
     struct GlyphWithIndex {
         std::shared_ptr<Shape> glyph{};
         int index;
@@ -328,13 +481,18 @@ private:
         theFont.push_back(GlyphWithIndex(glyph, index));
     }
     
+    CMap cmap;
+    
 public:
     
-    FontManager() {}
+    bool bReady = false;
+    
+    FontManager(std::vector<char> cmapData) : cmap{CMap(cmapData)} {}
     
     std::shared_ptr<Shape> get(int index) {
         for (auto gi : theFont) {
-            if (gi.index == index) {
+            auto g = std::dynamic_pointer_cast<Glyph>(gi.glyph);
+            if (g->getIndex() == index) {
                 if (gi.glyph == nullptr) {
                     return nullptr;
                 }
@@ -344,11 +502,17 @@ public:
         return nullptr;
     }
     
+    std::shared_ptr<Glyph> getFromUnicode(int codePoint) {
+        return std::dynamic_pointer_cast<Glyph>(get(cmap.get(codePoint)));
+    }
+    
 };
 
 
 class FontLoader {
 private:
+    
+    static int nDone;
     
     static void readlbpFontFile(std::string pathToGlyph, std::vector<std::vector<std::vector<glm::vec3>>>& bezierPaths) {
         std::ifstream ifs(pathToGlyph);
@@ -440,32 +604,21 @@ private:
     
 public:
     
+    static bool bReady;
+    
     static std::shared_ptr<Glyph> computeGlyphFromTTFont(TTFont& font, int insertionIndex) {
+        int glyphIndex = font.insertionIndexToGlyphIndex(insertionIndex);
         if (font.isCompound(insertionIndex)) {
             TTFCompoundGlyph cg = font.getCompoundGlyph(insertionIndex);
             std::vector<GlyphAndTransform> gats;
             for (auto ttfgat : cg.gats) {
-                int ins = font.glyphIndexToInsertionIndex(ttfgat.glyphIndex);
-                int emSpaceBoundingBox[4];
-                if (font.isCompound(ins)) {
-                    TTFCompoundGlyph glyph = font.getCompoundGlyph(ins);
-                    for (int i = 0; i < 4; ++i) {
-                        emSpaceBoundingBox[i] = glyph.boundingBox[i];
-                    }
-                }
-                else {
-                    TTFGlyph glyph = font.getGlyph(font.glyphIndexToInsertionIndex(ttfgat.glyphIndex));
-                    for (int i = 0; i < 4; ++i) {
-                        emSpaceBoundingBox[i] = glyph.boundingBox[i];
-                    }
-                }
                 auto subglyph = computeGlyphFromTTFont(font, font.glyphIndexToInsertionIndex(ttfgat.glyphIndex));
                 GlyphAndTransform gat;
                 gat.transform = ttfgat.transform;
                 gat.glyph = subglyph;
                 gats.push_back(gat);
             }
-            return std::make_shared<CompoundGlyph>(gats, cg.boundingBox, cg.index);
+            return std::make_shared<CompoundGlyph>(gats, cg.boundingBox, cg.index, cg.advanceWidth, cg.leftSideBearing);
         }
         TTFGlyph glyph = font.glyphs[insertionIndex];
         TTFGlyph absGlyph;
@@ -504,19 +657,21 @@ public:
                     throw std::exception();
                 }
                 for (int k = 1; k < contour.size()-2; k += 2) {
-                    glm::vec3 first = glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
-                    glm::vec3 second =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 third =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 fourth =  glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
+                    glm::vec3 offCurvePoint = glm::vec3(contour[k+1].xCoord, contour[k+1].yCoord, 0.f);
+                    glm::vec3 first =  glm::vec3(contour[k].xCoord, contour[k].yCoord, 0.f);
+                    glm::vec3 second =  first * 1.f/3.f + offCurvePoint * 2.f/3.f;
+                    glm::vec3 fourth =  glm::vec3(contour[k+2].xCoord, contour[k+2].yCoord, 0.f);
+                    glm::vec3 third =  offCurvePoint * 2.f/3.f + fourth * 1.f/3.f;
                     contourControlPoints.push_back(first);
                     contourControlPoints.push_back(second);
                     contourControlPoints.push_back(third);
                     contourControlPoints.push_back(fourth);
                 }
                 glm::vec3 first =  glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f, 1.f);
-                glm::vec3 second =  glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
-                glm::vec3 third =  glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 offCurvePoint = glm::vec3(contour[0].xCoord, contour[0].yCoord, 0.f);
+                glm::vec3 second =  first * 1.f/3.f + offCurvePoint * 2.f/3.f;
                 glm::vec3 fourth =  glm::vec4(contour[1].xCoord, contour[1].yCoord, 0.f,1.f);
+                glm::vec3 third =  offCurvePoint * 2.f/3.f + fourth * 1.f/3.f;
                 contourControlPoints.push_back(first);
                 contourControlPoints.push_back(second);
                 contourControlPoints.push_back(third);
@@ -526,19 +681,21 @@ public:
                     throw std::exception();
                 }
                 for (int k = 0; k < contour.size()-2; k += 2) {
-                    glm::vec3 first =  glm::vec4(contour[k].xCoord, contour[k].yCoord, 0.f, 1.0f);
-                    glm::vec3 second =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 third =  glm::vec4(contour[k+1].xCoord, contour[k+1].yCoord, 0.f, 1.0f);
-                    glm::vec3 fourth =  glm::vec4(contour[k+2].xCoord, contour[k+2].yCoord, 0.f, 1.0f);
+                    glm::vec3 offCurvePoint = glm::vec3(contour[k+1].xCoord, contour[k+1].yCoord, 0.f);
+                    glm::vec3 first =  glm::vec3(contour[k].xCoord, contour[k].yCoord, 0.f);
+                    glm::vec3 second =  first * 1.f/3.f + offCurvePoint * 2.f/3.f;
+                    glm::vec3 fourth =  glm::vec3(contour[k+2].xCoord, contour[k+2].yCoord, 0.f);
+                    glm::vec3 third =  offCurvePoint * 2.f/3.f + fourth * 1.f/3.f;
                     contourControlPoints.push_back(first);
                     contourControlPoints.push_back(second);
                     contourControlPoints.push_back(third);
                     contourControlPoints.push_back(fourth);
                 }
-                glm::vec3 first =  glm::vec4(contour[contour.size()-2].xCoord, contour[contour.size()-2].yCoord, 0.f, 1.f);
-                glm::vec3 second =  glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
-                glm::vec3 third =  glm::vec4(contour.back().xCoord, contour.back().yCoord, 0.f,1.f);
+                glm::vec3 first =  glm::vec3(contour[contour.size()-2].xCoord, contour[contour.size()-2].yCoord, 0.f);
+                glm::vec3 offCurvePoint = glm::vec3(contour.back().xCoord, contour.back().yCoord, 0.f);
+                glm::vec3 second =  first * 1.f/3.f + offCurvePoint * 2.f/3.f;
                 glm::vec3 fourth =  glm::vec4(contour[0].xCoord, contour[0].yCoord, 0.f,1.f);
+                glm::vec3 third =  offCurvePoint * 2.f/3.f + fourth * 1.f/3.f;
                 contourControlPoints.push_back(first);
                 contourControlPoints.push_back(second);
                 contourControlPoints.push_back(third);
@@ -553,22 +710,38 @@ public:
             controlPoints.push_back(contourControlPoints);
             contour.clear();
         }
-        auto fill = std::shared_ptr<SimpleGlyph>(new SimpleGlyph(emSpaceBezierPaths, controlPoints, glyph.index, glyph.boundingBox, font.unitsPerEm));
+        auto fill = std::shared_ptr<SimpleGlyph>(new SimpleGlyph(emSpaceBezierPaths, controlPoints, glyph.index, glyph.boundingBox, font.unitsPerEm, glyph.advanceWidth, glyph.leftSideBearing));
         return fill;
     }
     
-    static std::shared_ptr<FontManager> loadFont(TTFont& font, std::vector<std::function<void(std::shared_ptr<Glyph>)>>& callbacks, std::vector<glm::vec3> corners) {
-        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager());
+    static std::shared_ptr<FontManager> loadFont(TTFont& font, std::vector<std::function<void(std::shared_ptr<Glyph>)>> callbacks) {
+        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData));
         auto vec_mutex_ptr = std::make_shared<std::mutex>();
         for (int i = 0; i < font.getNGlyphs(); ++i) {
-            std::thread([&, manager, i, corners,vec_mutex_ptr]() {
+            std::thread([&, manager, i,vec_mutex_ptr, callbacks]() {
                 auto glyph = computeGlyphFromTTFont(font, i);
-                callbacks[i](glyph);
+                if (i < callbacks.size()) {
+                    callbacks[i](glyph);
+                }
                 vec_mutex_ptr->lock();
                 manager->put(glyph, i);
+                ++nDone;
+                if (nDone == font.getNGlyphs()-1) {
+                    manager->bReady = true;
+                }
                 vec_mutex_ptr->unlock();
             }).detach();
         }
+        return manager;
+    }
+    
+    static std::shared_ptr<FontManager> loadFont(TTFont& font) {
+        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData));
+        for (int i = 0; i < font.getNGlyphs(); ++i) {
+            auto glyph = computeGlyphFromTTFont(font, i);
+            manager->put(glyph, i);
+        }
+        manager->bReady = true;
         return manager;
     }
     
@@ -581,6 +754,8 @@ public:
     }
     
 };
+
+int FontLoader::nDone = 0;
 
 
 #endif /* glyph_h */

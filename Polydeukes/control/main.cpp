@@ -1047,12 +1047,21 @@ void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, S
     renderer.removeShape(grid);
     glyphContainer.clear();
     for (auto square : display) {
-        renderer.addMesh(square);
+        //renderer.addMesh(square);
         square->setOnClick([&, window, i, fontManager](std::weak_ptr<Shape> theIcon) {
             fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, std::to_string(i), icons, bHidden, bAlreadyClicked, glyphContainer, fontManager);
         });
         ++i;
     }
+}
+
+int Shape::n_freed_shapes = 0;
+
+unsigned int recentPressed = -1;
+
+void characterCallback(GLFWwindow* window, unsigned int codepoint) {
+    std::cout << "Unicode Codepoint: " << codepoint << " (" << (char)codepoint << ")\n";
+    recentPressed = codepoint;
 }
 
 void ttfInterpreter(GLFWwindow* window) {
@@ -1068,21 +1077,24 @@ void ttfInterpreter(GLFWwindow* window) {
     camera.enableFreeCameraMovement(window);
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     TTFont font = interpret();
-    int n = font.glyphIndexToInsertionIndex(130);
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::cout << "GOOZ";
+    }
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], font.unitsPerEm / 10.f));
-    int insertionIndex = 557;
     int j = 0;
     int i = 0;
     std::shared_ptr<Glyph> lastFill;
     std::vector<std::shared_ptr<SplineCurve>> lastCurves;
     std::vector<std::shared_ptr<Shape>> lastReifiedControlPoints{};
+    std::shared_ptr<Shape> lastLsb;
+    std::shared_ptr<Shape> lastAdw;
     auto preRenderCustomization = [&] {
         ++i;
-        if (i == 3) {
+        if (i == 5) {
+            i = 0;
             ++j;
             j = j % font.getNGlyphs();
-            //j = font.glyphIndexToInsertionIndex(115);
-            i = 0;
             renderer.removeShape(lastFill);
             for (auto& curve : lastCurves) {
                 renderer.removeShape(curve);
@@ -1090,18 +1102,44 @@ void ttfInterpreter(GLFWwindow* window) {
             for (auto& ctrl : lastReifiedControlPoints) {
                 renderer.removeShape(ctrl);
             }
-            auto fill = FontLoader::computeGlyphFromTTFont(font, j);
+            if (lastAdw) {
+                renderer.removeShape(lastAdw);
+            }
+            if (lastLsb) {
+                renderer.removeShape(lastLsb);
+            }
+            int glyphIndex = font.insertionIndexToGlyphIndex(j);
+            std::shared_ptr<Glyph> fill = std::dynamic_pointer_cast<Glyph>(manager->get(j));
             float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
             float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
+            auto lsb = SquareBuilder().build();
+            lsb->setModelingTransform(glm::translate(glm::mat4(1.f), glm::vec3(corners[0].x + fill->leftSideBearing*x, corners[0].y,0.f)) * glm::scale(glm::mat4(1.f), glm::vec3(0.1f,1.f,1.f)));
+            auto adw = SquareBuilder().build();
+            adw->setModelingTransform(glm::translate(glm::mat4(1.f), glm::vec3(corners[0].x + fill->advanceWidth*x, corners[0].y,0.f)) * glm::scale(glm::mat4(1.f), glm::vec3(0.1f,1.f,1.f)));
+            lastLsb=lsb; lastAdw=adw;
+            renderer.addMesh(lsb); renderer.addMesh(adw);
             float s = std::min(x,y);
             glm::vec2 centre = glm::vec2((fill->getEmSpaceBoundingBox()[2]+fill->getEmSpaceBoundingBox()[0])/2.f, (fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f);
             float boxy;
             float boxx;
-            boxy = corners[1].y - (2 * corners[1].y*((float)font.unitsPerEm - ((float)(fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f))/(float)font.unitsPerEm);
-            boxx = corners[1].x - (2 * corners[1].x*((float)font.unitsPerEm - ((float)(fill->getEmSpaceBoundingBox()[2] + fill->getEmSpaceBoundingBox()[0])/2.f))/(float)font.unitsPerEm);
+            float minboxxw = corners[0].x + ((fill->getEmSpaceBoundingBox()[0])/(float)font.unitsPerEm * 2 * corners[1].x);
+            float minboxyw = corners[0].y + ((fill->getEmSpaceBoundingBox()[1])/(float)font.unitsPerEm * 2 * corners[1].y);
+            glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+            float worldSpaceBoundingBox[4];
+            for (int i = 0; i < 4; ++i) {
+                if (i % 2 == 0) {
+                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(fill->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
+                }
+                else {
+                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, fill->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
+                }
+            }
+            boxx = -worldSpaceBoundingBox[0] + minboxxw;
+            boxy = -worldSpaceBoundingBox[1] + minboxyw;
             
-            glm::mat4 emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+            emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             fill->setModelingTransform(std::move(emToWorld));
+            fill->setColour(glm::vec3(0.f));
             renderer.addMesh(fill, &glyphProgram);
             std::vector<std::shared_ptr<SplineCurve>> contours{};
             std::vector<std::shared_ptr<Shape>> reifiedControlPoints{};
@@ -1124,18 +1162,96 @@ void ttfInterpreter(GLFWwindow* window) {
                 }
             }
             for (auto spline : contours) {
-                renderer.addMesh(spline, &splineCurveProgram);
+                //renderer.addMesh(spline, &splineCurveProgram);
             }
             for (auto s : reifiedControlPoints) {
-                renderer.addMesh(s);
+                //renderer.addMesh(s);
             }
+            lastCurves.clear();
+            lastReifiedControlPoints.clear();
             lastCurves = contours;
             lastReifiedControlPoints = reifiedControlPoints;
             lastFill = fill;
         }
     };
     renderer.addPreRenderCustomization(preRenderCustomization);
-    renderer.addMesh(grid);
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void renderTextEditor(GLFWwindow* window) {
+    glfwSetCharCallback(window, characterCallback);
+    glm::vec3 worldCursorPosition;
+    TTFont font = interpret();
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    program.init();
+    glyphProgram.init();
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    camera.enableFreeCameraMovement(window);
+    std::vector<glm::vec3> corners = camera.fovThroughOrigin();
+    worldCursorPosition.x = corners[0].x; worldCursorPosition.y = corners[1].y; worldCursorPosition.z = 0.f;
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+    std::shared_ptr<Glyph> lastFill;
+    auto preRenderCustomization2 = [&] {
+        if (recentPressed == -1) {
+            return;
+        }
+        auto fill = manager->getFromUnicode(recentPressed);
+        recentPressed = -1;
+        lastFill = fill;
+        if (fill==nullptr) {
+            return;
+        }
+        float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
+        float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
+        float s = std::min(x,y);
+        glm::vec2 centre = glm::vec2((fill->getEmSpaceBoundingBox()[2]+fill->getEmSpaceBoundingBox()[0])/2.f, (fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f);
+        float boxy;
+        float boxx;
+        float minboxxw = corners[0].x + ((fill->getEmSpaceBoundingBox()[0])/(float)font.unitsPerEm * 2 * corners[1].x);
+        float minboxyw = corners[0].y + ((fill->getEmSpaceBoundingBox()[1])/(float)font.unitsPerEm * 2 * corners[1].y);
+        glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+        float worldSpaceBoundingBox[4];
+        for (int i = 0; i < 4; ++i) {
+            if (i % 2 == 0) {
+                worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(fill->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
+            }
+            else {
+                worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, fill->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
+            }
+        }
+        boxx = -worldSpaceBoundingBox[0] + minboxxw;
+        boxy = -worldSpaceBoundingBox[1] + minboxyw;
+        
+        emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+        //now we need to translate to the world cursor position. a windowing transform.
+        //scale em square to font size square
+        float scaleX = 200.f/font.unitsPerEm;
+        float scaleY = scaleX;
+        glm::mat4 worldToFontScale = glm::scale(glm::mat4(1.f), glm::vec3(scaleX, scaleY, 1.f));
+        float fontSpaceEmSquare[4];
+        fontSpaceEmSquare[0] = (worldToFontScale * emToWorld * glm::vec4(0.f,0.f,0.f,1.f)).x;
+        fontSpaceEmSquare[1] = (worldToFontScale * emToWorld * glm::vec4(0.f,0.f,0.f,1.f)).y;
+        fontSpaceEmSquare[2] = (worldToFontScale * emToWorld * glm::vec4(2048.f,0.f,0.f,1.f)).x;
+        fontSpaceEmSquare[3] = (worldToFontScale * emToWorld * glm::vec4(0.f,2048.f,0.f,1.f)).y;
+        //translate to cursor position
+        glm::mat4 translateToCursorPosition = glm::translate(glm::mat4(1.0f), glm::vec3(worldCursorPosition.x - fontSpaceEmSquare[0], worldCursorPosition.y - fontSpaceEmSquare[3], 0.f));
+        glm::mat4 worldToFont = translateToCursorPosition * worldToFontScale;
+        fill->setModelingTransform(worldToFont * emToWorld);
+        glm::vec4 deltaAdvance = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::vec4(fill->advanceWidth, 0.f,0.f,1.f);
+        std::cout << " delta: " << (worldToFontScale * deltaAdvance).x << std::endl;
+        worldCursorPosition.x += (worldToFontScale * deltaAdvance).x;
+        if (worldCursorPosition.x >= corners[1].x) {
+            worldCursorPosition.x = corners[0].x; worldCursorPosition.y -= 1.f;
+        }
+        renderer.addMesh(fill, &glyphProgram);
+    };
+    renderer.addPreRenderCustomization(preRenderCustomization2);
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -1152,14 +1268,15 @@ void renderFontEngine(GLFWwindow* window) {
     Renderer renderer(&theScene,&program);
     Arcball arcball(&camera);
     std::vector<std::shared_ptr<Shape>> controlPoints{};
-    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [](double,double){});
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [window, &arcball](double x,double y){
+        arcball.registerRotationCallback(window, x, y);
+    });
     SplineShapeRelation relation{};
     std::vector<std::vector<std::vector<glm::vec3>>> bezierPaths{};
     int nCurveClicks = 0; int nBezierPaths = 0;
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     TTFont font = interpret();
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], (font.unitsPerEm/10)));
-    //define the dimensions of the 27 squares that make up the 9x3 display.
     float width = corners[1].x - corners[0].x;
     float height = corners[1].y - corners[0].y;
     std::vector<std::shared_ptr<Shape>> menuDisplay{};
@@ -1180,16 +1297,36 @@ void renderFontEngine(GLFWwindow* window) {
         menuDisplay.push_back(square);
         std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
             glm::vec2 centre = glm::vec2((glyph->getEmSpaceBoundingBox()[2]+glyph->getEmSpaceBoundingBox()[0])/2.f, (glyph->getEmSpaceBoundingBox()[3] + glyph->getEmSpaceBoundingBox()[1])/2.f);
+            glyph->setColour(glm::vec3(0.f,1.f,0.f));
+            glyph->setOnHover([](std::weak_ptr<Shape> thisGlyph) {
+                thisGlyph.lock()->setColour(glm::vec3(1.f,0.f,0.f));
+            });
+            glyph->setOffHover([](std::weak_ptr<Shape> thisGlyph) {
+                thisGlyph.lock()->setColour(glm::vec3(0.f,1.f,0.f));
+            });
+            glyph->setOnClick([window](std::weak_ptr<Shape> thisGlyph) {
+                MeshDragger::registerMousePositionCallback(window, thisGlyph);
+            });
             float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
             float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
             float s = std::min(x,y);
             float boxy;
             float boxx;
-            boxy = corners[1].y - (2 * corners[1].y*((float)font.unitsPerEm - ((float)(glyph->getEmSpaceBoundingBox()[3] + glyph->getEmSpaceBoundingBox()[1])/2.f))/(float)font.unitsPerEm);
-            boxx = corners[1].x - (2 * corners[1].x*((float)font.unitsPerEm - ((float)(glyph->getEmSpaceBoundingBox()[2] + glyph->getEmSpaceBoundingBox()[0])/2.f))/(float)font.unitsPerEm);
-            
-            glm::mat4 emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+            float minboxxw = corners[0].x + ((glyph->getEmSpaceBoundingBox()[0])/(float)font.unitsPerEm * 2 * corners[1].x);
+            float minboxyw = corners[0].y + ((glyph->getEmSpaceBoundingBox()[1])/(float)font.unitsPerEm * 2 * corners[1].y);
+            glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             float worldSpaceBoundingBox[4];
+            for (int i = 0; i < 4; ++i) {
+                if (i % 2 == 0) {
+                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(glyph->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
+                }
+                else {
+                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, glyph->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
+                }
+            }
+            boxx = -worldSpaceBoundingBox[0] + minboxxw;
+            boxy = -worldSpaceBoundingBox[1] + minboxyw;
+            emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             for (int i = 0; i < 4; ++i) {
                 if (i % 2 == 0) {
                     worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(glyph->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
@@ -1200,14 +1337,15 @@ void renderFontEngine(GLFWwindow* window) {
             }
             glyph->setModelingTransform(getMenuWindowingTransform(camera, glyph->getIndex(), worldSpaceBoundingBox, nHorizontal, nVertical, font.unitsPerEm) * emToWorld);
             vec_mutex.lock();
-            glyphContainer.push_back(glyph);
-            renderer.addMesh(glyph, &glyphProgram);
+            auto g = glyph->clone();
+            glyphContainer.push_back(g);
+            renderer.addMesh(g, &glyphProgram);
             vec_mutex.unlock();
         };
         onGlyphReadyCallbacks[i] = cb;
     }
     std::string fontDirectory = getFontDirectory();
-    std::shared_ptr<FontManager> fontManager = FontLoader::loadFont(font, onGlyphReadyCallbacks, corners);
+    std::shared_ptr<FontManager> fontManager = FontLoader::loadFont(font, onGlyphReadyCallbacks);
     std::vector<std::shared_ptr<Shape>> icons{};
     for (int i = 0; i < 5; ++i) {
         icons.push_back(IconBuilder(&camera).build());
@@ -1763,7 +1901,7 @@ int main(int argc, const char * argv[]) {
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    renderFontEngine(window);
+    renderTextEditor(window);
 
     glfwTerminate();
     return 0;

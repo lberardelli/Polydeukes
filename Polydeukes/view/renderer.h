@@ -44,7 +44,7 @@ private:
     Scene* theScene;
     std::vector<Particle> particles{};
     glm::mat4 view;
-    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)ScreenHeight::screen_width / (float)ScreenHeight::screen_height, 1.f, 50.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(fov), (float)ScreenHeight::screen_width / (float)ScreenHeight::screen_height, .1f, 500.0f);
     std::function<void()> preRenderCustomization = [] {};
     static float fov;
     
@@ -176,6 +176,10 @@ public:
             view = camera->viewingTransformation();
             glm::vec3 cameraPosition = camera->getPosition();
             for (RenderPackage& package : instructions) {
+                if (package.shape == nullptr || package.program == nullptr) {
+                    std::cout << "WTF" << std::endl;
+                    continue;
+                }
                 package.program->bind();
                 package.program->setMat4("view", view);
                 package.program->setMat4("projection", projection);
@@ -186,10 +190,6 @@ public:
                 package.program->setVec3("lightPosition", light.position);
                 package.program->setVec3("eye", cameraPosition);
                 previousProgram = package.program;
-                if (package.shape == nullptr) {
-                    std::cout << "WTF" << std::endl;
-                    continue;
-                }
                 package.shape->render(*package.program);
             }
             std::vector<collision> collisions{};

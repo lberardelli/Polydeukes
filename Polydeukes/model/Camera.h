@@ -88,12 +88,12 @@ private:
                         case GLFW_KEY_DOWN:
                             camera->onDownArrowPress(window);
                             break;
-                        case GLFW_KEY_W:
-                            camera->onWPress(window);
-                            break;
-                        case GLFW_KEY_S:
-                            camera->onSPress(window);
-                            break;
+//                        case GLFW_KEY_W:
+//                            camera->onWPress(window);
+//                            break;
+//                        case GLFW_KEY_S:
+//                            camera->onSPress(window);
+//                            break;
                         default:
                             break;
                     }
