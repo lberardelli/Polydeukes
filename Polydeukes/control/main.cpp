@@ -1178,43 +1178,28 @@ void ttfInterpreter(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
-void renderTextEditor(GLFWwindow* window) {
-    glfwSetCharCallback(window, characterCallback);
-    glm::vec3 worldCursorPosition;
-    TTFont font = interpret();
-    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
-    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
-    program.init();
-    glyphProgram.init();
-    Scene theScene{};
-    Renderer renderer(&theScene,&program);
-    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
-    camera.enableFreeCameraMovement(window);
-    std::vector<glm::vec3> corners = camera.fovThroughOrigin();
-    worldCursorPosition.x = corners[0].x; worldCursorPosition.y = corners[1].y; worldCursorPosition.z = 0.f;
-    auto manager = FontLoader::loadFont(font, {});
-    while (!manager->bReady) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    }
-    std::shared_ptr<Glyph> lastFill;
-    auto preRenderCustomization2 = [&] {
-        if (recentPressed == -1) {
-            return;
-        }
-        auto fill = manager->getFromUnicode(recentPressed);
-        recentPressed = -1;
-        lastFill = fill;
-        if (fill==nullptr) {
-            return;
-        }
-        float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
-        float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
-        float s = std::min(x,y);
+class TextBox : public Shape, public std::enable_shared_from_this<TextBox> {
+private:
+    struct GlyphAndCursorPosition {
+        std::shared_ptr<Glyph> fill;
+        glm::vec3 wsCursorPosition;
+        
+        GlyphAndCursorPosition(std::shared_ptr<Glyph> fill, glm::vec3 wsCursorPosition) : fill(fill), wsCursorPosition(wsCursorPosition) {}
+    };
+    std::shared_ptr<Square> canvas;
+    std::shared_ptr<Square> cursor;
+    std::shared_ptr<FontManager> manager;
+    glm::vec3 cursorPosition;
+    std::deque<GlyphAndCursorPosition> gandcp;
+    float width; float height;
+    ShaderProgram* glyphShaderProgram;
+    
+    glm::mat4 emToWorld(std::shared_ptr<Glyph> fill, float s) {
         glm::vec2 centre = glm::vec2((fill->getEmSpaceBoundingBox()[2]+fill->getEmSpaceBoundingBox()[0])/2.f, (fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f);
         float boxy;
         float boxx;
-        float minboxxw = corners[0].x + ((fill->getEmSpaceBoundingBox()[0])/(float)font.unitsPerEm * 2 * corners[1].x);
-        float minboxyw = corners[0].y + ((fill->getEmSpaceBoundingBox()[1])/(float)font.unitsPerEm * 2 * corners[1].y);
+        float minboxxw = -width/2.f + ((fill->getEmSpaceBoundingBox()[0])/(float)manager->unitsPerEm * width);
+        float minboxyw = -height/2.f + ((fill->getEmSpaceBoundingBox()[1])/(float)manager->unitsPerEm * height);
         glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
         float worldSpaceBoundingBox[4];
         for (int i = 0; i < 4; ++i) {
@@ -1228,30 +1213,183 @@ void renderTextEditor(GLFWwindow* window) {
         boxx = -worldSpaceBoundingBox[0] + minboxxw;
         boxy = -worldSpaceBoundingBox[1] + minboxyw;
         
-        emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
-        //now we need to translate to the world cursor position. a windowing transform.
-        //scale em square to font size square
-        float scaleX = 200.f/font.unitsPerEm;
-        float scaleY = scaleX;
+        return glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+    }
+    
+    glm::mat4 worldToFont(glm::mat4& emToWorld, float scaleX, float scaleY) {
         glm::mat4 worldToFontScale = glm::scale(glm::mat4(1.f), glm::vec3(scaleX, scaleY, 1.f));
         float fontSpaceEmSquare[4];
         fontSpaceEmSquare[0] = (worldToFontScale * emToWorld * glm::vec4(0.f,0.f,0.f,1.f)).x;
         fontSpaceEmSquare[1] = (worldToFontScale * emToWorld * glm::vec4(0.f,0.f,0.f,1.f)).y;
-        fontSpaceEmSquare[2] = (worldToFontScale * emToWorld * glm::vec4(2048.f,0.f,0.f,1.f)).x;
-        fontSpaceEmSquare[3] = (worldToFontScale * emToWorld * glm::vec4(0.f,2048.f,0.f,1.f)).y;
+        fontSpaceEmSquare[2] = (worldToFontScale * emToWorld * glm::vec4((float)(manager->unitsPerEm),0.f,0.f,1.f)).x;
+        fontSpaceEmSquare[3] = (worldToFontScale * emToWorld * glm::vec4(0.f,(float)(manager->unitsPerEm),0.f,1.f)).y;
         //translate to cursor position
-        glm::mat4 translateToCursorPosition = glm::translate(glm::mat4(1.0f), glm::vec3(worldCursorPosition.x - fontSpaceEmSquare[0], worldCursorPosition.y - fontSpaceEmSquare[3], 0.f));
-        glm::mat4 worldToFont = translateToCursorPosition * worldToFontScale;
-        fill->setModelingTransform(worldToFont * emToWorld);
-        glm::vec4 deltaAdvance = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::vec4(fill->advanceWidth, 0.f,0.f,1.f);
-        std::cout << " delta: " << (worldToFontScale * deltaAdvance).x << std::endl;
-        worldCursorPosition.x += (worldToFontScale * deltaAdvance).x;
-        if (worldCursorPosition.x >= corners[1].x) {
-            worldCursorPosition.x = corners[0].x; worldCursorPosition.y -= 1.f;
+        glm::mat4 translateToCursorPosition = glm::translate(glm::mat4(1.0f), glm::vec3(cursorPosition.x - fontSpaceEmSquare[0], cursorPosition.y - fontSpaceEmSquare[3], 0.f));
+        return translateToCursorPosition * worldToFontScale;
+    }
+    
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+        TextBox* box = static_cast<TextBox*>(glfwGetWindowUserPointer(window));
+        if (action == GLFW_PRESS) {
+            switch (key) {
+                case GLFW_KEY_BACKSPACE: {
+                    if (box->gandcp.size() == 0) {
+                        return;
+                    }
+                    auto deleted = box->gandcp.back();
+                    box->gandcp.pop_back();
+                    box->cursorPosition = deleted.wsCursorPosition;
+                    float scaleX = .05f;
+                    float heightOfRow = box->height * scaleX;
+                    auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(box->cursorPosition.x, box->cursorPosition.y-(heightOfRow/2.f), .1f));
+                    auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01, heightOfRow, 1.f));
+                    box->cursor->setModelingTransform(cTrans * cScale);
+                    break;
+                }
+                case GLFW_KEY_ENTER: {
+                    float scaleX = .05f;
+                    float heightOfRow = box->height * scaleX;
+                    glm::vec pos = box->getPosition();
+                    box->cursorPosition.x = pos.x-box->width/2.f; box->cursorPosition.y -= heightOfRow;
+                    auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(box->cursorPosition.x, box->cursorPosition.y-(heightOfRow/2.f), .1f));
+                    auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01, heightOfRow, 1.f));
+                    box->cursor->setModelingTransform(cTrans * cScale);
+                    break;
+                }
+            }
         }
-        renderer.addMesh(fill, &glyphProgram);
+    }
+    
+    static void characterCallback(GLFWwindow* window, unsigned int codepoint) {
+        TextBox* box = static_cast<TextBox*>(glfwGetWindowUserPointer(window));
+        float x = box->width / ((float)box->manager->unitsPerEm);
+        float y = box->height / ((float)box->manager->unitsPerEm);
+        float s = std::min(x,y);
+        float scaleX = .05f;
+        float scaleY = scaleX;
+        auto fill = box->manager->getFromUnicode(codepoint);
+        auto emToWorld = box->emToWorld(fill, s);
+        auto worldToFont = box->worldToFont(emToWorld, scaleX, scaleY);
+        fill->setModelingTransform(glm::translate(glm::mat4(1.f), glm::vec3(0.f,0.f,.1f)) * worldToFont * emToWorld);
+        glm::vec4 deltaAdvance = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::vec4(fill->advanceWidth, 0.f,0.f,1.f);
+        glm::mat4 worldToFontScale = glm::scale(glm::mat4(1.f), glm::vec3(scaleX, scaleY, 1.f));
+        box->gandcp.push_back(GlyphAndCursorPosition(fill, box->cursorPosition));
+        box->cursorPosition.x += (worldToFontScale * deltaAdvance).x;
+        glm::vec3 pos = box->getPosition();
+        float heightOfRow = box->height * scaleX;
+        if (box->cursorPosition.x >= pos.x + box->width/2.f) {
+            box->cursorPosition.x = pos.x-box->width/2.f; box->cursorPosition.y -= heightOfRow;
+        }
+        auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(box->cursorPosition.x, box->cursorPosition.y-(heightOfRow/2.f), .1f));
+        auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01f, heightOfRow, 1.f));
+        box->cursor->setModelingTransform(cTrans * cScale);
+    }
+        
+public:
+    
+    void initReferenceToThis() {
+        referenceToThis = shared_from_this();
+    }
+    
+    TextBox(GLFWwindow* window, std::shared_ptr<FontManager> manager, float width, float height, ShaderProgram* glyphShader) : manager(manager), width(width), height(height) {
+        canvas = std::dynamic_pointer_cast<Square>(SquareBuilder().withColour(glm::vec3(0.f,0.f,0.f)).build());
+        cursor = std::dynamic_pointer_cast<Square>(SquareBuilder().withColour(glm::vec3(1.f,1.f,1.f)).build());
+        canvas->setModelingTransform(glm::scale(glm::mat4(1.f), glm::vec3(width, height, 1.f)));
+        cursorPosition = glm::vec3(-width/2.f, height/2.f, 0.f);
+        glyphShaderProgram = glyphShader;
+        float scaleY = .05f;
+        float heightOfRow = height * scaleY;
+        auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01, heightOfRow, 1.f));
+        auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(cursorPosition.x, cursorPosition.y-(heightOfRow/2.f), 0.f));
+        cursor->setModelingTransform(cTrans * cScale);
+        glfwSetWindowUserPointer(window, this);
+        glfwSetCharCallback(window, characterCallback);
+        glfwSetKeyCallback(window, keyCallback);
+        setOnClick([window](std::weak_ptr<Shape> thisBox) {
+            MeshDragger::registerMousePositionCallback(window, thisBox);
+        });
+    }
+    
+    void render(ShaderProgram shaderProgram) override {
+        canvas->render(shaderProgram);
+        cursor->render(shaderProgram);
+        for (auto& gandc : gandcp) {
+            glyphShaderProgram->bind();
+            gandc.fill->render(*glyphShaderProgram);
+        }
+    }
+    
+    std::shared_ptr<Shape> clone() override {
+        return nullptr;
+    }
+    
+    void updateModellingTransform(glm::mat4&& delta) override {
+        canvas->setModelingTransform(glm::mat4(delta * canvas->getModellingTransform()));
+        cursor->setModelingTransform(glm::mat4(delta * cursor->getModellingTransform()));
+        cursorPosition = delta * glm::vec4(cursorPosition,1.f);
+        for (auto& t : gandcp) {
+            t.fill->setModelingTransform(delta * t.fill->getModellingTransform());
+            t.wsCursorPosition = delta * glm::vec4(t.wsCursorPosition, 1.f);
+        }
+    }
+    
+    glm::vec3 getPosition() const override {
+        glm::vec4 tmp = glm::vec4(0.0f,0.0f,0.0f,1.0f);
+        tmp = canvas->getModellingTransform() * tmp;
+        return glm::vec3(tmp.x,tmp.y,tmp.z);
+    }
+    
+    void setModelingTransform(glm::mat4&& transform) override {
+        canvas->setModelingTransform(transform);
+        cursor->setModelingTransform(transform);
+        cursorPosition = transform * glm::vec4(cursorPosition,1.f);
+        for (auto& t : gandcp) {
+            t.fill->setModelingTransform(transform);
+            t.wsCursorPosition = transform * glm::vec4(t.wsCursorPosition, 1.f);
+        }
+    }
+    
+    void setModelingTransform(glm::mat4& transform) override {
+        canvas->setModelingTransform(transform);
+        cursor->setModelingTransform(transform);
+        cursorPosition = transform * glm::vec4(cursorPosition,1.f);
+        for (auto& t : gandcp) {
+            t.fill->setModelingTransform(transform);
+            t.wsCursorPosition = transform * glm::vec4(t.wsCursorPosition, 1.f);
+        }
+    }
+    
+    std::vector<glm::vec3> getAABB() override {
+        return canvas->getAABB();
+    }
+};
+
+void renderTextEditor(GLFWwindow* window) {
+    struct GlyphAndCursorPosition {
+        std::shared_ptr<Glyph> fill;
+        glm::vec3 wsCursorPosition;
     };
-    renderer.addPreRenderCustomization(preRenderCustomization2);
+    TTFont font = interpret();
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    program.init();
+    glyphProgram.init();
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    Arcball arcball(&camera);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [window, &arcball](double x,double y){
+        arcball.registerRotationCallback(window, x, y);
+    });
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+    std::shared_ptr<Shape> textBox = std::make_unique<TextBox>(window, manager, 5, 5, &glyphProgram);
+    std::dynamic_pointer_cast<TextBox>(textBox)->initReferenceToThis();
+    renderer.addMesh(textBox, {&program, &glyphProgram});
+    picker.enable(window);
+    MeshDragger::camera = &camera;
     renderer.buildandrender(window, &camera, &theScene);
 }
 

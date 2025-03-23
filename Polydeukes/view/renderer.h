@@ -50,7 +50,10 @@ private:
     
     struct RenderPackage {
         std::shared_ptr<Shape> shape;
-        ShaderProgram* program;
+        //A shape can be a dag. Each node might make use of different shader. probably just couple shaders and shapes but not sure.
+        //Need to inject viewing data into each render call somehow... like the render call traverses the tree but render data is only
+        //Set at the top node.
+        std::vector<ShaderProgram*> programs{};
     };
     
     ShaderProgram* defaultProgram;
@@ -112,7 +115,16 @@ public:
         if (shape == nullptr) {
             std::cout << "goon" << std::endl;
         }
-        RenderPackage package{shape, program};
+        RenderPackage package{shape, {program}};
+        instructions.push_back(package);
+        theScene->addMesh(shape);
+    }
+    
+    void addMesh(std::shared_ptr<Shape> shape, std::vector<ShaderProgram*> programs) {
+        if (shape == nullptr) {
+            std::cout << "goon" << std::endl;
+        }
+        RenderPackage package{shape, programs};
         instructions.push_back(package);
         theScene->addMesh(shape);
     }
@@ -176,21 +188,24 @@ public:
             view = camera->viewingTransformation();
             glm::vec3 cameraPosition = camera->getPosition();
             for (RenderPackage& package : instructions) {
-                if (package.shape == nullptr || package.program == nullptr) {
+                if (package.shape == nullptr || package.programs[0] == nullptr) {
                     std::cout << "WTF" << std::endl;
                     continue;
                 }
-                package.program->bind();
-                package.program->setMat4("view", view);
-                package.program->setMat4("projection", projection);
-
-                //set the lighting uniforms
-                //program.setVec3("aColour", glm::vec3(1.0f, 0.5f, 0.31f));
-                package.program->setVec3("lightColour", light.colour);
-                package.program->setVec3("lightPosition", light.position);
-                package.program->setVec3("eye", cameraPosition);
-                previousProgram = package.program;
-                package.shape->render(*package.program);
+                for (auto& program : package.programs) {
+                    program->bind();
+                    program->setMat4("view", view);
+                    program->setMat4("projection", projection);
+                    
+                    //set the lighting uniforms
+                    //program.setVec3("aColour", glm::vec3(1.0f, 0.5f, 0.31f));
+                    program->setVec3("lightColour", light.colour);
+                    program->setVec3("lightPosition", light.position);
+                    program->setVec3("eye", cameraPosition);
+                    previousProgram = program;
+                }
+                package.programs[0]->bind();
+                package.shape->render(*package.programs[0]);
             }
             std::vector<collision> collisions{};
             for (int i = 0; i < particles.size(); ++i) {

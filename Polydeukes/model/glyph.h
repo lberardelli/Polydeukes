@@ -45,7 +45,17 @@ std::vector<glm::vec3> computeBezierCurve(std::vector<glm::vec3>& controlPoints)
     return positions;
 }
 
+
+class CompoundGlyph;
+class SimpleGlyph;
+class FontManager;
+
 class Glyph : public Shape {
+    friend CompoundGlyph;
+    friend SimpleGlyph;
+    friend FontManager;
+private:
+    virtual void init() = 0;
 public:
     virtual std::vector<std::vector<glm::vec3>> getControlPoints() = 0;
     virtual int* getEmSpaceBoundingBox() {
@@ -105,8 +115,11 @@ public:
     
 };
 
+class FontManager;
 
 class SimpleGlyph : public Glyph {
+    friend CompoundGlyph;
+    friend FontManager;
 private:
     GLuint vao, vbo, ebo, sdfTexture;
     int numEdges{};
@@ -157,7 +170,7 @@ private:
         return inside ? -minDist : minDist;
     }
     
-    void init() {
+    void init() override {
         glGenTextures(1, &sdfTexture);
         glBindTexture(GL_TEXTURE_2D, sdfTexture);
 
@@ -197,15 +210,12 @@ private:
 
         glVertexAttribPointer(0, 2, GL_INT, GL_FALSE, 2 * sizeof(int), (void*)0);
         glEnableVertexAttribArray(0);
+        bInitialized = true;
     }
 
 public:
     
     virtual ~SimpleGlyph() {
-        glDeleteTextures(1, &sdfTexture);
-        glDeleteBuffers(1, &vbo);
-        glDeleteVertexArrays(1, &vao);
-        glDeleteBuffers(1, &ebo);
     }
     
     std::vector<std::vector<glm::vec3>> getControlPoints() override {
@@ -228,7 +238,6 @@ public:
     void render(ShaderProgram shaderProgram) override {
         if (!bInitialized) {
             init();
-            bInitialized = true;
         }
         shaderProgram.setVec2("resolution", glm::vec2(ScreenHeight::screen_width,ScreenHeight::screen_height));
         shaderProgram.setVec2("minBounds", glm::vec2(emSpaceBoundingBox[0],emSpaceBoundingBox[1]));
@@ -312,6 +321,11 @@ class CompoundGlyph : public Glyph {
 private:
     std::vector<GlyphAndTransform> childGlyphs{};
     int index = -1;
+    virtual void init() override {
+        for (auto cg : childGlyphs) {
+            cg.glyph->init();
+        }
+    }
 public:
     
     virtual ~CompoundGlyph() {}
@@ -364,6 +378,7 @@ class FontLoader;
 class FontManager {
     friend FontLoader;
 private:
+    std::vector<int> requestedGlyphs{};
     
     class CMap {
         
@@ -484,10 +499,10 @@ private:
     CMap cmap;
     
 public:
-    
+    const int unitsPerEm;
     bool bReady = false;
     
-    FontManager(std::vector<char> cmapData) : cmap{CMap(cmapData)} {}
+    FontManager(std::vector<char> cmapData, int unitsPerEm) : cmap{CMap(cmapData)}, unitsPerEm(unitsPerEm) {}
     
     std::shared_ptr<Shape> get(int index) {
         for (auto gi : theFont) {
@@ -495,6 +510,10 @@ public:
             if (g->getIndex() == index) {
                 if (gi.glyph == nullptr) {
                     return nullptr;
+                }
+                if (std::find(requestedGlyphs.cbegin(), requestedGlyphs.cend(), index) == requestedGlyphs.cend()) {
+                    requestedGlyphs.push_back(index);
+                    g->init();
                 }
                 return gi.glyph->clone();
             }
@@ -715,7 +734,7 @@ public:
     }
     
     static std::shared_ptr<FontManager> loadFont(TTFont& font, std::vector<std::function<void(std::shared_ptr<Glyph>)>> callbacks) {
-        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData));
+        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData, font.unitsPerEm));
         auto vec_mutex_ptr = std::make_shared<std::mutex>();
         for (int i = 0; i < font.getNGlyphs(); ++i) {
             std::thread([&, manager, i,vec_mutex_ptr, callbacks]() {
@@ -736,7 +755,7 @@ public:
     }
     
     static std::shared_ptr<FontManager> loadFont(TTFont& font) {
-        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData));
+        std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData, font.unitsPerEm));
         for (int i = 0; i < font.getNGlyphs(); ++i) {
             auto glyph = computeGlyphFromTTFont(font, i);
             manager->put(glyph, i);

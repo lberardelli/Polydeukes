@@ -125,11 +125,11 @@ public:
     
     virtual std::shared_ptr<Shape> clone() = 0;
     
-    virtual void onHover() override {
+    void onHover() override {
         hoverCallback(referenceToThis);
     }
     
-    virtual void offHover() override {
+    void offHover() override {
         offHoverCallback(referenceToThis);
     }
     
@@ -165,23 +165,23 @@ public:
         this->onMouseUpCallback = that.onMouseUpCallback;
     }
     
-    virtual void onRightClick() override {
+    void onRightClick() override {
         rightClickCallback(referenceToThis);
     }
     
-    virtual void onClick(glm::vec3 exactPosition = glm::vec3(0.0f,0.0f,0.f)) override {
+    void onClick(glm::vec3 exactPosition = glm::vec3(0.0f,0.0f,0.f)) override {
         clickCallback(referenceToThis, exactPosition);
     }
     
-    virtual void onMouseUp() override {
+    void onMouseUp() override {
         onMouseUpCallback(referenceToThis);
     }
     
-    virtual void onDrag() override {
+    void onDrag() override {
         onMouseDragCallback(referenceToThis);
     }
     
-    virtual void onRightClickUp() override {
+    void onRightClickUp() override {
         rightClickUpCallback(referenceToThis);
     }
     
