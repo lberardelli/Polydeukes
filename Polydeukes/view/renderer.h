@@ -188,7 +188,7 @@ public:
             view = camera->viewingTransformation();
             glm::vec3 cameraPosition = camera->getPosition();
             for (RenderPackage& package : instructions) {
-                if (package.shape == nullptr || package.programs[0] == nullptr) {
+                if (package.shape == nullptr || package.programs.size() == 0 || package.programs[0] == nullptr) {
                     std::cout << "WTF" << std::endl;
                     continue;
                 }

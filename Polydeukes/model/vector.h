@@ -98,7 +98,7 @@ public:
         return glm::translate(glm::mat4(1.0f), (currentPosition - (glm::vec3(delta.x/2.f, delta.y/2.f, delta.z/2.0f)))) * scaleTransform;
     }
     
-    static glm::mat4 scalGeometryBetweenTwoPointsStretch(glm::vec3 currentPosition, glm::vec3 initialPosition) {
+    static glm::mat4 scaleGeometryBetweenTwoPointsStretch(glm::vec3 currentPosition, glm::vec3 initialPosition) {
         glm::vec3 delta = currentPosition - initialPosition;
         glm::vec3 normalDelta = glm::normalize(delta);
         float deltaLength = glm::length(delta);

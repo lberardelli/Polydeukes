@@ -263,11 +263,16 @@ public:
                 std::string seconds = line.substr(line.find("OFFSET") + 7, line.length());
                 std::stringstream second(seconds);
                 std::string x;
-                char delim;
-                if (line.find("\t") != std::string::npos) {
-                    delim = '\t';
+                char delim = 'z';
+                size_t currentPos = 0;
+                size_t pos = 0;
+                while ((pos = line.find('\t', currentPos)) != std::string::npos) {
+                    if ((line.at(pos+1) <= '9' && line.at(pos+1) >= '0') || line.at(pos+1) == '-') {
+                        delim = '\t';
+                    }
+                    currentPos = pos+1;
                 }
-                else {
+                if (delim == 'z') {
                     delim = ' ';
                 }
                 std::getline(second, x, delim);

@@ -31,6 +31,8 @@
 #include "../model/glyph.h"
 #include "../view/screenheight.h"
 #include "../model/ttfinterpreter.h"
+#include "../model/textbox.h"
+#include "../model/armature.h"
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -374,6 +376,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
     ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
     program.init();
     Camera camera(glm::vec3(0.,150.f,150.f), glm::vec3(0.f,10.f,0.f));
+    camera.enableFreeCameraMovement(window);
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     Arcball arcball = Arcball(&camera);
@@ -381,7 +384,7 @@ void renderMotionCaptureScene(GLFWwindow* window) {
         arcball.registerRotationCallback(window, mosPosx, mosPosy);
     });
     picker.enable(window);
-    std::string bvhFile = "/Users/lawrenceberardelli/Documents/bvh_sample_files/thief.bvh";
+    std::string bvhFile = "/Users/lawrenceberardelli/Documents/bvh_sample_files/cowboy.bvh";
     std::shared_ptr<SceneGraph> graph(new SceneGraph(bvhFile));
     renderer.addMesh(std::dynamic_pointer_cast<Shape>(graph), &program);
     renderer.buildandrender(window, &camera, &theScene);
@@ -733,11 +736,15 @@ struct SplineShapeRelation {
     SplineShapeRelation(){}
 };
 
-void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineSurfaceContainer, Renderer& renderer) {
+void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& controlPoints, SplineShapeRelation& splineSurfaceContainer) {
     //read in bpt file
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    program.init();
     ShaderProgram splineSurfaceProgram;
     splineSurfaceProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinesurfacetcs.glsl", getShaderDirectory() + "beziersurfacetes.glsl", getShaderDirectory() + "fragmentshader.glsl",
          getShaderDirectory() + "passthroughgs.glsl");
+    Scene theScene{};
+    Renderer renderer(&theScene, &program);
     ShaderProgram splineSurfaceNormalProgram;
     splineSurfaceNormalProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinesurfacetcs.glsl", getShaderDirectory() + "beziersurfacetes.glsl", getShaderDirectory() + "lightsourceshader.glsl",
          getShaderDirectory() + "addnormalgs.glsl");
@@ -759,7 +766,7 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
                 while (iss >> coordinate) {
                     position.push_back(std::stof(coordinate));
                 }
-                std::shared_ptr<Shape> controlPoint = CubeBuilder().withColour(glm::vec3(1.0f,1.0f,1.0f)).build();
+                std::shared_ptr<Shape> controlPoint = CubeBuilder().withColour(glm::vec3(1.0f,.0f,.0f)).build();
                 controlPoint->setModelingTransform(glm::scale(glm::mat4(1.0f), glm::vec3(.1f,.1f,.1f)));
                 controlPoint->updateModellingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(position[0], position[1], position[2])));
                 controlPoint->setOnClick([&](std::weak_ptr<Shape> targetShape) {
@@ -807,7 +814,7 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
                 }
             }
             if (bGoingUp) {
-                if (tick < 100) {
+                if (tick < 1000) {
                     ++tick;
                 }
                 else {
@@ -820,7 +827,7 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
                 }
                 else {
                     bGoingUp = true;
-                    delay = -100;
+                    delay = -1000;
                 }
             }
         };
@@ -845,6 +852,20 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
             }
         });
     }
+    Camera camera(glm::vec3(0.0f,10.f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    camera.enableFreeCameraMovement(window);
+    Arcball arcball = Arcball(&camera);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mosPosx, double mosPosy) {
+        arcball.registerRotationCallback(window, mosPosx, mosPosy);
+    });
+    picker.enable(window);
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void renderBPTSurface(GLFWwindow* window) {
+    std::vector<std::shared_ptr<Shape>> controlPoints;
+    SplineShapeRelation splineSurfaceContainer;
+    bptInterpreter(window, controlPoints, splineSurfaceContainer);
 }
 
 void splineSurfaceInterpolator(SplineShapeRelation& splineSurfaceContainer, std::vector<std::shared_ptr<Shape>>& controlPoints, Renderer& renderer) {
@@ -1091,7 +1112,7 @@ void ttfInterpreter(GLFWwindow* window) {
     std::shared_ptr<Shape> lastAdw;
     auto preRenderCustomization = [&] {
         ++i;
-        if (i == 5) {
+        if (i == 12) {
             i = 0;
             ++j;
             j = j % font.getNGlyphs();
@@ -1162,10 +1183,10 @@ void ttfInterpreter(GLFWwindow* window) {
                 }
             }
             for (auto spline : contours) {
-                //renderer.addMesh(spline, &splineCurveProgram);
+                renderer.addMesh(spline, &splineCurveProgram);
             }
             for (auto s : reifiedControlPoints) {
-                //renderer.addMesh(s);
+                renderer.addMesh(s);
             }
             lastCurves.clear();
             lastReifiedControlPoints.clear();
@@ -1177,192 +1198,6 @@ void ttfInterpreter(GLFWwindow* window) {
     renderer.addPreRenderCustomization(preRenderCustomization);
     renderer.buildandrender(window, &camera, &theScene);
 }
-
-class TextBox : public Shape, public std::enable_shared_from_this<TextBox> {
-private:
-    struct GlyphAndCursorPosition {
-        std::shared_ptr<Glyph> fill;
-        glm::vec3 wsCursorPosition;
-        
-        GlyphAndCursorPosition(std::shared_ptr<Glyph> fill, glm::vec3 wsCursorPosition) : fill(fill), wsCursorPosition(wsCursorPosition) {}
-    };
-    std::shared_ptr<Square> canvas;
-    std::shared_ptr<Square> cursor;
-    std::shared_ptr<FontManager> manager;
-    glm::vec3 cursorPosition;
-    std::deque<GlyphAndCursorPosition> gandcp;
-    float width; float height;
-    ShaderProgram* glyphShaderProgram;
-    
-    glm::mat4 emToWorld(std::shared_ptr<Glyph> fill, float s) {
-        glm::vec2 centre = glm::vec2((fill->getEmSpaceBoundingBox()[2]+fill->getEmSpaceBoundingBox()[0])/2.f, (fill->getEmSpaceBoundingBox()[3] + fill->getEmSpaceBoundingBox()[1])/2.f);
-        float boxy;
-        float boxx;
-        float minboxxw = -width/2.f + ((fill->getEmSpaceBoundingBox()[0])/(float)manager->unitsPerEm * width);
-        float minboxyw = -height/2.f + ((fill->getEmSpaceBoundingBox()[1])/(float)manager->unitsPerEm * height);
-        glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
-        float worldSpaceBoundingBox[4];
-        for (int i = 0; i < 4; ++i) {
-            if (i % 2 == 0) {
-                worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(fill->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
-            }
-            else {
-                worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, fill->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
-            }
-        }
-        boxx = -worldSpaceBoundingBox[0] + minboxxw;
-        boxy = -worldSpaceBoundingBox[1] + minboxyw;
-        
-        return glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
-    }
-    
-    glm::mat4 worldToFont(glm::mat4& emToWorld, float scaleX, float scaleY) {
-        glm::mat4 worldToFontScale = glm::scale(glm::mat4(1.f), glm::vec3(scaleX, scaleY, 1.f));
-        float fontSpaceEmSquare[4];
-        fontSpaceEmSquare[0] = (worldToFontScale * emToWorld * glm::vec4(0.f,0.f,0.f,1.f)).x;
-        fontSpaceEmSquare[1] = (worldToFontScale * emToWorld * glm::vec4(0.f,0.f,0.f,1.f)).y;
-        fontSpaceEmSquare[2] = (worldToFontScale * emToWorld * glm::vec4((float)(manager->unitsPerEm),0.f,0.f,1.f)).x;
-        fontSpaceEmSquare[3] = (worldToFontScale * emToWorld * glm::vec4(0.f,(float)(manager->unitsPerEm),0.f,1.f)).y;
-        //translate to cursor position
-        glm::mat4 translateToCursorPosition = glm::translate(glm::mat4(1.0f), glm::vec3(cursorPosition.x - fontSpaceEmSquare[0], cursorPosition.y - fontSpaceEmSquare[3], 0.f));
-        return translateToCursorPosition * worldToFontScale;
-    }
-    
-    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-        TextBox* box = static_cast<TextBox*>(glfwGetWindowUserPointer(window));
-        if (action == GLFW_PRESS) {
-            switch (key) {
-                case GLFW_KEY_BACKSPACE: {
-                    if (box->gandcp.size() == 0) {
-                        return;
-                    }
-                    auto deleted = box->gandcp.back();
-                    box->gandcp.pop_back();
-                    box->cursorPosition = deleted.wsCursorPosition;
-                    float scaleX = .05f;
-                    float heightOfRow = box->height * scaleX;
-                    auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(box->cursorPosition.x, box->cursorPosition.y-(heightOfRow/2.f), .1f));
-                    auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01, heightOfRow, 1.f));
-                    box->cursor->setModelingTransform(cTrans * cScale);
-                    break;
-                }
-                case GLFW_KEY_ENTER: {
-                    float scaleX = .05f;
-                    float heightOfRow = box->height * scaleX;
-                    glm::vec pos = box->getPosition();
-                    box->cursorPosition.x = pos.x-box->width/2.f; box->cursorPosition.y -= heightOfRow;
-                    auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(box->cursorPosition.x, box->cursorPosition.y-(heightOfRow/2.f), .1f));
-                    auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01, heightOfRow, 1.f));
-                    box->cursor->setModelingTransform(cTrans * cScale);
-                    break;
-                }
-            }
-        }
-    }
-    
-    static void characterCallback(GLFWwindow* window, unsigned int codepoint) {
-        TextBox* box = static_cast<TextBox*>(glfwGetWindowUserPointer(window));
-        float x = box->width / ((float)box->manager->unitsPerEm);
-        float y = box->height / ((float)box->manager->unitsPerEm);
-        float s = std::min(x,y);
-        float scaleX = .05f;
-        float scaleY = scaleX;
-        auto fill = box->manager->getFromUnicode(codepoint);
-        auto emToWorld = box->emToWorld(fill, s);
-        auto worldToFont = box->worldToFont(emToWorld, scaleX, scaleY);
-        fill->setModelingTransform(glm::translate(glm::mat4(1.f), glm::vec3(0.f,0.f,.1f)) * worldToFont * emToWorld);
-        glm::vec4 deltaAdvance = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::vec4(fill->advanceWidth, 0.f,0.f,1.f);
-        glm::mat4 worldToFontScale = glm::scale(glm::mat4(1.f), glm::vec3(scaleX, scaleY, 1.f));
-        box->gandcp.push_back(GlyphAndCursorPosition(fill, box->cursorPosition));
-        box->cursorPosition.x += (worldToFontScale * deltaAdvance).x;
-        glm::vec3 pos = box->getPosition();
-        float heightOfRow = box->height * scaleX;
-        if (box->cursorPosition.x >= pos.x + box->width/2.f) {
-            box->cursorPosition.x = pos.x-box->width/2.f; box->cursorPosition.y -= heightOfRow;
-        }
-        auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(box->cursorPosition.x, box->cursorPosition.y-(heightOfRow/2.f), .1f));
-        auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01f, heightOfRow, 1.f));
-        box->cursor->setModelingTransform(cTrans * cScale);
-    }
-        
-public:
-    
-    void initReferenceToThis() {
-        referenceToThis = shared_from_this();
-    }
-    
-    TextBox(GLFWwindow* window, std::shared_ptr<FontManager> manager, float width, float height, ShaderProgram* glyphShader) : manager(manager), width(width), height(height) {
-        canvas = std::dynamic_pointer_cast<Square>(SquareBuilder().withColour(glm::vec3(0.f,0.f,0.f)).build());
-        cursor = std::dynamic_pointer_cast<Square>(SquareBuilder().withColour(glm::vec3(1.f,1.f,1.f)).build());
-        canvas->setModelingTransform(glm::scale(glm::mat4(1.f), glm::vec3(width, height, 1.f)));
-        cursorPosition = glm::vec3(-width/2.f, height/2.f, 0.f);
-        glyphShaderProgram = glyphShader;
-        float scaleY = .05f;
-        float heightOfRow = height * scaleY;
-        auto cScale = glm::scale(glm::mat4(1.0f), glm::vec3(.01, heightOfRow, 1.f));
-        auto cTrans = glm::translate(glm::mat4(1.0f), glm::vec3(cursorPosition.x, cursorPosition.y-(heightOfRow/2.f), 0.f));
-        cursor->setModelingTransform(cTrans * cScale);
-        glfwSetWindowUserPointer(window, this);
-        glfwSetCharCallback(window, characterCallback);
-        glfwSetKeyCallback(window, keyCallback);
-        setOnClick([window](std::weak_ptr<Shape> thisBox) {
-            MeshDragger::registerMousePositionCallback(window, thisBox);
-        });
-    }
-    
-    void render(ShaderProgram shaderProgram) override {
-        canvas->render(shaderProgram);
-        cursor->render(shaderProgram);
-        for (auto& gandc : gandcp) {
-            glyphShaderProgram->bind();
-            gandc.fill->render(*glyphShaderProgram);
-        }
-    }
-    
-    std::shared_ptr<Shape> clone() override {
-        return nullptr;
-    }
-    
-    void updateModellingTransform(glm::mat4&& delta) override {
-        canvas->setModelingTransform(glm::mat4(delta * canvas->getModellingTransform()));
-        cursor->setModelingTransform(glm::mat4(delta * cursor->getModellingTransform()));
-        cursorPosition = delta * glm::vec4(cursorPosition,1.f);
-        for (auto& t : gandcp) {
-            t.fill->setModelingTransform(delta * t.fill->getModellingTransform());
-            t.wsCursorPosition = delta * glm::vec4(t.wsCursorPosition, 1.f);
-        }
-    }
-    
-    glm::vec3 getPosition() const override {
-        glm::vec4 tmp = glm::vec4(0.0f,0.0f,0.0f,1.0f);
-        tmp = canvas->getModellingTransform() * tmp;
-        return glm::vec3(tmp.x,tmp.y,tmp.z);
-    }
-    
-    void setModelingTransform(glm::mat4&& transform) override {
-        canvas->setModelingTransform(transform);
-        cursor->setModelingTransform(transform);
-        cursorPosition = transform * glm::vec4(cursorPosition,1.f);
-        for (auto& t : gandcp) {
-            t.fill->setModelingTransform(transform);
-            t.wsCursorPosition = transform * glm::vec4(t.wsCursorPosition, 1.f);
-        }
-    }
-    
-    void setModelingTransform(glm::mat4& transform) override {
-        canvas->setModelingTransform(transform);
-        cursor->setModelingTransform(transform);
-        cursorPosition = transform * glm::vec4(cursorPosition,1.f);
-        for (auto& t : gandcp) {
-            t.fill->setModelingTransform(transform);
-            t.wsCursorPosition = transform * glm::vec4(t.wsCursorPosition, 1.f);
-        }
-    }
-    
-    std::vector<glm::vec3> getAABB() override {
-        return canvas->getAABB();
-    }
-};
 
 void renderTextEditor(GLFWwindow* window) {
     struct GlyphAndCursorPosition {
@@ -1377,6 +1212,7 @@ void renderTextEditor(GLFWwindow* window) {
     Scene theScene{};
     Renderer renderer(&theScene,&program);
     Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    camera.enableFreeCameraMovement(window);
     Arcball arcball(&camera);
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [window, &arcball](double x,double y){
         arcball.registerRotationCallback(window, x, y);
@@ -1385,11 +1221,36 @@ void renderTextEditor(GLFWwindow* window) {
     while (!manager->bReady) {
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
-    std::shared_ptr<Shape> textBox = std::make_unique<TextBox>(window, manager, 5, 5, &glyphProgram);
+    std::shared_ptr<Shape> textBox = std::make_unique<TextBox>(window, manager, 10, 5, &glyphProgram);
     std::dynamic_pointer_cast<TextBox>(textBox)->initReferenceToThis();
     renderer.addMesh(textBox, {&program, &glyphProgram});
     picker.enable(window);
     MeshDragger::camera = &camera;
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void renderFontShapes(GLFWwindow* window) {
+    TTFont font = interpret();
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    program.init();
+    glyphProgram.init();
+    Scene theScene{};
+    Renderer renderer(&theScene,&glyphProgram);
+    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    camera.enableFreeCameraMovement(window);
+    Arcball arcball(&camera);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [window, &arcball](double x,double y){
+        arcball.registerRotationCallback(window, x, y);
+    });
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+    std::shared_ptr<Shape> sphere = std::make_unique<WordCircle>(manager);
+    renderer.addMesh(sphere);
+    renderer.addMesh(CubeBuilder().build(), &program);
+    picker.enable(window);
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -1796,6 +1657,117 @@ bool Chip8InputHandler::is_key_pressed[16] = {
     false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 };
 
+void GameBoyInterpreter(GLFWwindow* window) {
+    ShaderProgram program(getShaderDirectory() + "instanced_vs.glsl", getShaderDirectory() + "instanced_fs.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Scene theScene{};
+    Renderer renderer(&theScene,&program);
+    const int screenWidth = 160;
+    const int screenHeight = 144;
+    const int numPixels = screenWidth * screenHeight;
+    uint8_t pixelData[160 * 144 * 3];
+    for (int j = 0; j < screenHeight; ++j) {
+        for (int i = 0; i < screenWidth; ++i) {
+            int index = (j * screenWidth + i) * 3;
+
+            // Horizontal gradient for Red, Vertical gradient for Green
+            float red   = static_cast<float>(i) / screenWidth;
+            float green = static_cast<float>(j) / screenHeight;
+            float blue  = 0.2f;  // constant blue
+
+            pixelData[index + 0] = static_cast<uint8_t>(red   * 255);
+            pixelData[index + 1] = static_cast<uint8_t>(green * 255);
+            pixelData[index + 2] = static_cast<uint8_t>(blue  * 255);
+        }
+    }
+
+    // Base quad (centered at origin)
+    float quadVertices[] = {
+        -0.5f, -0.5f,
+         0.5f, -0.5f,
+         0.5f,  0.5f,
+        -0.5f,  0.5f
+    };
+
+    unsigned int quadIndices[] = { 0, 1, 2, 2, 3, 0 };
+
+    // Instance positions: one per pixel
+    std::vector<glm::vec2> pixelPositions;
+    for (int y = 0; y < screenHeight; ++y)
+        for (int x = 0; x < screenWidth; ++x)
+            pixelPositions.emplace_back(x, y);
+
+    // VAO/VBO setup
+    GLuint quadVAO, quadVBO, instanceVBO, EBO;
+    glGenVertexArrays(1, &quadVAO);
+    glBindVertexArray(quadVAO);
+
+    glGenBuffers(1, &quadVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glGenBuffers(1, &instanceVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+    glBufferData(GL_ARRAY_BUFFER, pixelPositions.size() * sizeof(glm::vec2), pixelPositions.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribDivisor(1, 1); // <-- Important!
+
+    // Index buffer
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIndices), quadIndices, GL_STATIC_DRAW);
+
+    // Create and upload 160x144 RGB8 texture
+    GLuint pixelTex;
+    glGenTextures(1, &pixelTex);
+    glBindTexture(GL_TEXTURE_2D, pixelTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenWidth, screenHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, pixelData);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    // Draw
+    using clock = std::chrono::high_resolution_clock;
+
+    auto startTime = clock::now();
+    auto lastTime = startTime;
+    int frameCount = 0;
+
+    while (!glfwWindowShouldClose(window)) {
+        program.bind();
+        // Timing
+        auto currentTime = clock::now();
+        float elapsedTime = std::chrono::duration<float>(currentTime - startTime).count();
+        float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+        lastTime = currentTime;
+        frameCount++;
+
+        // Render
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        program.init();
+        program.setVec2("uScreenSize", glm::vec2(screenWidth, screenHeight));
+        glBindTexture(GL_TEXTURE_2D, pixelTex);
+        glBindVertexArray(quadVAO);
+        glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, numPixels);
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+
+        // FPS log every second
+        static float timeAccumulator = 0.0f;
+        timeAccumulator += deltaTime;
+        if (timeAccumulator >= 1.0f) {
+            std::cout << "FPS: " << frameCount << "\n";
+            frameCount = 0;
+            timeAccumulator = 0.0f;
+        }
+    }
+}
+
 void chipEightInterpreter(GLFWwindow* window) {
     ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "chip8fragmentshader.glsl");
     program.init();
@@ -1858,7 +1830,7 @@ void chipEightInterpreter(GLFWwindow* window) {
         }
     }
     //load game into ram
-    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Sierpinski [Sergey Naydenov, 2010].ch8", std::ios::binary);
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/snake.ch8", std::ios::binary);
     if (!inputFile) {
         std::cerr << "Failed to open the file." << std::endl;
         return;
@@ -2008,6 +1980,49 @@ void window_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+void skeletalAnimationPackage(GLFWwindow* window) {
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    program.init();
+    Camera camera(glm::vec3(0.0f,0.0f,15.f), glm::vec3(0.0f,0.0f,0.0f));
+    Arcball arcball(&camera);
+    Scene theScene{};
+    MeshDragger::camera = &camera;
+    Renderer renderer(&theScene,&program);
+    std::vector<std::shared_ptr<Shape>> armatures{};
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mosPosx, double mosPosy) {
+        arcball.registerRotationCallback(window, mosPosx, mosPosy);
+    }, [&](double mosPosx, double mosPosy) {
+        std::shared_ptr<Shape> shape = std::make_unique<Armature>();
+        armatures.push_back(shape);
+        std::dynamic_pointer_cast<Armature>(shape)->initReferenceToThis();
+        renderer.addMesh(shape);
+        shape->setOnClick([&](std::weak_ptr<Shape> weakShape, glm::vec3 exactPosition) {
+            Armature::armatureClickCallback(window, &camera, weakShape.lock(), exactPosition);
+        });
+        shape->setOnMouseUp([&](std::weak_ptr<Shape> theShape) {
+            picker.enableRayTrianglePicker(window);
+            std::shared_ptr<Armature> t = std::dynamic_pointer_cast<Armature>(theShape.lock());
+            auto taabb = t->getTailRegion();
+            for (auto arm : armatures) {
+                if (arm == theShape.lock()) {
+                    continue;
+                }
+                //if the head overlaps the tail snap-to
+                std::shared_ptr<Armature> s = std::dynamic_pointer_cast<Armature>(arm);
+                auto aabb = s->getHeadRegion();
+                if ((aabb[0].x <= taabb[1].x && aabb[1].x >= taabb[0].x) &&
+                    (aabb[0].y <= taabb[1].y && aabb[1].y >= taabb[0].y) &&
+                    (aabb[0].z <= taabb[1].z && aabb[1].z >= taabb[0].z)) {
+                    s->setColour(glm::vec3(1.f,0.f,0.f));
+                    t->setColour(glm::vec3(1.f,0.f,0.f));
+                }
+            }
+        });
+    });
+    picker.enableRayTrianglePicker(window);
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
 
 /*
  TODO: Using MVC to define multiple viewing rectangles. Tinker with glViewport and google around to see examples.
@@ -2038,8 +2053,10 @@ int main(int argc, const char * argv[]) {
     GLint maxBlockSize;
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxBlockSize);
     std::cout << "UBO size: " << maxBlockSize << std::endl;
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    renderTextEditor(window);
+    renderBPTSurface(window);
 
     glfwTerminate();
     return 0;

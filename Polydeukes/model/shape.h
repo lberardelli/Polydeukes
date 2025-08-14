@@ -150,6 +150,10 @@ public:
         setModelingTransform(glm::mat4(transform * modellingTransform));
     }
     
+    virtual void updateModellingTransform(glm::mat4& transform) {
+        setModelingTransform(glm::mat4(transform * modellingTransform));
+    }
+    
     virtual void addRotationTransform(glm::mat4&& rotation) {
         setModelingTransform(modellingTransform * rotation);
     }
@@ -169,7 +173,7 @@ public:
         rightClickCallback(referenceToThis);
     }
     
-    void onClick(glm::vec3 exactPosition = glm::vec3(0.0f,0.0f,0.f)) override {
+    void onClick(glm::vec3 exactPosition) override {
         clickCallback(referenceToThis, exactPosition);
     }
     

@@ -183,7 +183,7 @@ public:
 };
 
 TTFont interpret() {
-    std::ifstream file("/Users/lawrenceberardelli/Downloads/ttf_examples/Times New Roman.ttf", std::ios::binary);
+    std::ifstream file("/Users/lawrenceberardelli/Downloads/ttf_examples/Paul-le1V.ttf", std::ios::binary);
     if (!file) {
         std::cerr << "Error opening file. Code: " << file.rdstate() << " (" << strerror(errno) << ")" << std::endl;
         TTFont font;

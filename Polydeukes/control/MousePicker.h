@@ -59,7 +59,7 @@ public:
     
     static glm::vec3 computeNewLocation(double mousePosX, double mousePosY);
     
-    MeshDragger(Camera* camera, Renderer* renderer) {
+    MeshDragger(Camera* camera) {
         MeshDragger::camera = camera;
     }
 };
@@ -197,12 +197,7 @@ private:
     static std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> computeRayTriangleCollisions() {
         std::vector<std::tuple<std::shared_ptr<Shape>, glm::vec3>> candidates;
         std::vector<std::shared_ptr<Shape>> sceneItems = theScene->get();
-        int i = 0;
         for (auto&& shape : sceneItems) {
-            if (i > 0) {
-                break;
-            }
-            ++i;
             constexpr float epsilon = std::numeric_limits<float>::epsilon();
             std::vector<glm::vec3> triangles = shape->getPositions();
             for (int i = 0; i < triangles.size(); i+=3) {
