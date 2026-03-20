@@ -48,7 +48,18 @@ glm::vec3 LineDrawer::computeNewLocation(double mousePosX, double mousePosY, glm
         glm::vec4 res2 = camera->viewingTransformation() * glm::vec4(std::get<1>(e2), 1.0f);
         return res2.z < res1.z;
     });
-    glm::vec3 planeNormal = glm::normalize(glm::cross(glm::vec3(1.0f,0.0f,0.0f), std::get<1>(candidates[0]) - initialPosition));
+    glm::vec3 delta = lineData.endPosition - initialPosition;
+    glm::vec3 planeNormal;
+    if (glm::length(delta) < 1e-4f) {
+        // No direction established yet — fall back to the camera view plane.
+        planeNormal = camera->getDirection();
+    } else {
+        glm::vec3 axis = glm::vec3(1.0f, 0.0f, 0.0f);
+        if (glm::length(glm::cross(axis, delta)) < 1e-4f) {
+            axis = glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+        planeNormal = glm::normalize(glm::cross(axis, delta));
+    }
     glm::vec3 planeSamplePoint = initialPosition;
     //ray plane intersection
     return vector::rayPlaneIntersection(Plane(planeNormal, planeSamplePoint), mouseRay);

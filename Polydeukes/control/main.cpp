@@ -545,9 +545,9 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
     glyphProgram.init();
     auto manager = FontLoader::loadFont(font, {});
-    while (!manager->bReady) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    }
+//    while (!manager->bReady) {
+//        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+//    }
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
@@ -2749,7 +2749,7 @@ int main(int argc, const char * argv[]) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    renderBasicSplineStudy(window);
+    renderFontEngine(window);
 
     glfwTerminate();
     return 0;

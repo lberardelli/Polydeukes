@@ -786,18 +786,17 @@ public:
         std::shared_ptr<FontManager> manager = std::shared_ptr<FontManager>(new FontManager(font.mapTableData, font.unitsPerEm));
         auto vec_mutex_ptr = std::make_shared<std::mutex>();
         for (int i = 0; i < font.getNGlyphs(); ++i) {
-            std::thread([&, manager, i,vec_mutex_ptr, callbacks]() {
+            std::thread([&font, manager, i, vec_mutex_ptr, callbacks, nGlyphs = font.getNGlyphs()]() {
                 auto glyph = computeGlyphFromTTFont(font, i);
-                if (i < callbacks.size()) {
+                if (i < (int)callbacks.size()) {
                     callbacks[i](glyph);
                 }
-                vec_mutex_ptr->lock();
+                std::lock_guard<std::mutex> lock(*vec_mutex_ptr);
                 manager->put(glyph, i);
                 ++nDone;
-                if (nDone == font.getNGlyphs()-1) {
+                if (nDone == nGlyphs - 1) {
                     manager->bReady = true;
                 }
-                vec_mutex_ptr->unlock();
             }).detach();
         }
         return manager;
