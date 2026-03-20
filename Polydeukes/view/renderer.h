@@ -173,7 +173,7 @@ public:
     void buildandrender(GLFWwindow* window, Camera* camera, Scene* theScene) {
         this->theScene = theScene;
         defaultProgram->setInt("texture1", 0);
-        light light(glm::vec3(1.0,1.0,1.0), glm::vec3(0.0, 15.0, 4.0));
+        light light(glm::vec3(1.0,1.0,1.0), glm::vec3(0.0, 150.0, 150.0));
         //addMesh(CubeBuilder().withPosition(light.position).withColour(glm::vec3(1.0f,1.0f,1.0f)).build());
         ShaderProgram* previousProgram = 0;
         double framerate = 60;
@@ -238,7 +238,7 @@ public:
                 std::this_thread::sleep_for(sleepTime);
             }
             if (i % 10 == 0) {
-                std::cout << "framerate: " << 1.f/frameTime << std::endl;
+                //std::cout << "framerate: " << 1.f/frameTime << std::endl;
                 i = 0;
             }
             ++i;

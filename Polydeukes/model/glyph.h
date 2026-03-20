@@ -21,7 +21,7 @@
 #include "sphere.h"
 #include <stdexcept>
 
-unsigned int GRANULARITY = 100;
+unsigned int GRANULARITY = 50;
 
 std::vector<glm::vec3> computeBezierCurve(std::vector<glm::vec3>& controlPoints) {
     std::array<glm::vec3, 4> currentCurve;
@@ -131,15 +131,15 @@ private:
     GLuint vao, vbo, ebo, sdfTexture;
     int numEdges{};
     bool bInitialized = false;
-    float sdfData[32 * 32]{};
+    float sdfData[64 * 64]{};
     std::vector<std::vector<glm::vec3>> controlPoints{};
     int index = -1;
     
     SimpleGlyph(const SimpleGlyph& that) : Glyph(that), numEdges(that.numEdges), vao(that.vao), vbo(that.vbo), ebo(that.ebo), sdfTexture(that.sdfTexture), bInitialized(that.bInitialized), controlPoints(that.controlPoints) {
         if (!that.bInitialized) {
-            for (int i = 0; i < 32; ++i) {
-                for (int j = 0; j < 32; ++j) {
-                    sdfData[j * 32 + i] = that.sdfData[j*32 + i];
+            for (int i = 0; i < 64; ++i) {
+                for (int j = 0; j < 64; ++j) {
+                    sdfData[j * 64 + i] = that.sdfData[j*64 + i];
                 }
             }
         }
@@ -182,14 +182,14 @@ private:
         glBindTexture(GL_TEXTURE_2D, sdfTexture);
 
         // Allocate storage for the SDF texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 32, 32, 0, GL_RED, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 64, 64, 0, GL_RED, GL_FLOAT, nullptr);
 
         // Set texture parameters
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 32, 32, GL_RED, GL_FLOAT, sdfData);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 64, 64, GL_RED, GL_FLOAT, sdfData);
 
         unsigned int indices[] = {
             0, 1, 2,
@@ -263,10 +263,10 @@ private:
             maxY = std::max(maxY, vertex.y);
         }
                 
-        float cellSizeY = (maxY - minY) / 32.f;
-        float cellSizeX = (maxX - minX) / 32.f;
-        for (int i = 0; i < 32; ++i) {
-            for (int j = 0; j < 32; ++j) {
+        float cellSizeY = (maxY - minY) / 64.f;
+        float cellSizeX = (maxX - minX) / 64.f;
+        for (int i = 0; i < 64; ++i) {
+            for (int j = 0; j < 64; ++j) {
                 float emX = minX + i * cellSizeX;
                 float emY = minY + j * cellSizeY;
                 glm::vec2 gridPoint = glm::vec2(emX, emY);
@@ -274,7 +274,7 @@ private:
                 // Compute SDF value (distance to nearest glyph edge)
                 float sdf = computeSignedDistance(gridPoint, edges, numEdges);
 
-                sdfData[j * 32 + i] = sdf;  // Store in row-major order
+                sdfData[j * 64 + i] = sdf;  // Store in row-major order
             }
         }
     }
@@ -931,6 +931,31 @@ public:
     
     
 };
+
+glm::mat4 computeEmToWorldTransform(std::vector<glm::vec3>& corners, std::shared_ptr<Glyph> glyph, unsigned int unitsPerEm) {
+    glm::vec2 centre = glm::vec2((glyph->getEmSpaceBoundingBox()[2]+glyph->getEmSpaceBoundingBox()[0])/2.f, (glyph->getEmSpaceBoundingBox()[3] + glyph->getEmSpaceBoundingBox()[1])/2.f);
+    float x = (corners[1].x - corners[0].x) / ((float)unitsPerEm);
+    float y = (corners[1].y - corners[0].y) / ((float)unitsPerEm);
+    float s = std::min(x,y);
+    float boxy;
+    float boxx;
+    float minboxxw = corners[0].x + ((glyph->getEmSpaceBoundingBox()[0])/(float)unitsPerEm * 2 * corners[1].x);
+    float minboxyw = corners[0].y + ((glyph->getEmSpaceBoundingBox()[1])/(float)unitsPerEm * 2 * corners[1].y);
+    glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+    float worldSpaceBoundingBox[4];
+    for (int i = 0; i < 4; ++i) {
+        if (i % 2 == 0) {
+            worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(glyph->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
+        }
+        else {
+            worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, glyph->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
+        }
+    }
+    boxx = -worldSpaceBoundingBox[0] + minboxxw;
+    boxy = -worldSpaceBoundingBox[1] + minboxyw;
+    emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+    return emToWorld;
+}
 
 
 #endif /* glyph_h */

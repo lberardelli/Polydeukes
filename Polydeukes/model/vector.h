@@ -94,7 +94,7 @@ public:
             glm::vec4(w, 0.0f),
             glm::vec4(t, 1.0f)
         );
-        glm::mat4 scaleTransform = homogeneousMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(deltaLength,deltaLength/2, deltaLength/2));
+        glm::mat4 scaleTransform = homogeneousMatrix * glm::scale(glm::mat4(1.0f), glm::vec3(1.f/deltaLength,deltaLength/2, deltaLength/2));
         return glm::translate(glm::mat4(1.0f), (currentPosition - (glm::vec3(delta.x/2.f, delta.y/2.f, delta.z/2.0f)))) * scaleTransform;
     }
     

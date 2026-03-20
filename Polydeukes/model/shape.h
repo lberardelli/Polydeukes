@@ -164,9 +164,11 @@ public:
         this->colour = that.colour;
         this->texture = that.texture;
         this->clickCallback = that.clickCallback;
+        this->rightClickCallback = that.rightClickCallback;
         this->hoverCallback = that.hoverCallback;
         this->offHoverCallback = that.offHoverCallback;
         this->onMouseUpCallback = that.onMouseUpCallback;
+        this->rightClickUpCallback = that.rightClickUpCallback;
     }
     
     void onRightClick() override {
@@ -286,6 +288,11 @@ public:
     
     ShapeBuilder& withOnClickCallback(std::function<void(std::weak_ptr<Shape>)> callback) {
         shape->setOnClick(callback);
+        return *this;
+    }
+    
+    ShapeBuilder& withOnRightClickCallback(std::function<void(std::weak_ptr<Shape>)> callback) {
+        shape->setOnRightClick(callback);
         return *this;
     }
     

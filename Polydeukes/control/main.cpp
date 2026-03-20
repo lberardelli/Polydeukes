@@ -541,6 +541,13 @@ void renderBasicSplineStudy(GLFWwindow* window) {
     Arcball arcball(&camera);
     std::vector<std::shared_ptr<Shape>> controlPoints{};
     std::vector<HermiteControlPoint> hermiteControlPoints{};
+    TTFont font = interpret();
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    glyphProgram.init();
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
     MousePicker picker = MousePicker(&renderer, &camera, &theScene, [&](double mousePosx, double mousePosy) {
         Ray mouseRay = MousePicker::computeMouseRay(mousePosx, mousePosy);
         Plane plane(camera.getDirection(), glm::vec3(0.f,0.f,0.f));
@@ -749,7 +756,7 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
     splineSurfaceNormalProgram.createShaderProgram(getShaderDirectory() + "passthroughvs.glsl", getShaderDirectory() + "splinesurfacetcs.glsl", getShaderDirectory() + "beziersurfacetes.glsl", getShaderDirectory() + "lightsourceshader.glsl",
          getShaderDirectory() + "addnormalgs.glsl");
     std::string line;
-    std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teapot.bpt");
+    std::ifstream myfile("/Users/lawrenceberardelli/Downloads/utah_teaspoon.bpt");
     int nSurfaces = 0;
     if (myfile.is_open())
     {
@@ -814,11 +821,12 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
                 }
             }
             if (bGoingUp) {
-                if (tick < 1000) {
+                if (tick < 500) {
                     ++tick;
                 }
                 else {
                     bGoingUp = false;
+                    delay = -100;
                 }
             }
             else {
@@ -827,7 +835,7 @@ void bptInterpreter(GLFWwindow* window, std::vector<std::shared_ptr<Shape>>& con
                 }
                 else {
                     bGoingUp = true;
-                    delay = -1000;
+                    delay = -100;
                 }
             }
         };
@@ -1068,7 +1076,7 @@ void fontEngineMenu(ShaderProgram& splineCurveProgram, ShaderProgram& program, S
     renderer.removeShape(grid);
     glyphContainer.clear();
     for (auto square : display) {
-        //renderer.addMesh(square);
+        renderer.addMesh(square);
         square->setOnClick([&, window, i, fontManager](std::weak_ptr<Shape> theIcon) {
             fontEditor(splineCurveProgram, program, glyphProgram, renderer, camera, picker, window, arcball, controlPoints, splineContainer, bezierPaths, nCurveClicks, endOfLastPath, grid, display, std::to_string(i), icons, bHidden, bAlreadyClicked, glyphContainer, fontManager);
         });
@@ -1099,8 +1107,10 @@ void ttfInterpreter(GLFWwindow* window) {
     std::vector<glm::vec3> corners = camera.fovThroughOrigin();
     TTFont font = interpret();
     auto manager = FontLoader::loadFont(font, {});
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [](double x,double y){});
+    picker.enable(window);
     while (!manager->bReady) {
-        std::cout << "GOOZ";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
     auto grid = std::shared_ptr<Grid>(new Grid(corners[0], corners[1], font.unitsPerEm / 10.f));
     int j = 0;
@@ -1110,9 +1120,19 @@ void ttfInterpreter(GLFWwindow* window) {
     std::vector<std::shared_ptr<Shape>> lastReifiedControlPoints{};
     std::shared_ptr<Shape> lastLsb;
     std::shared_ptr<Shape> lastAdw;
+    bool bShowSplines = false;
+    bool bShowControlPoints = false;
+    std::shared_ptr<Shape> splineToggle = IconBuilder(&camera).withOnClickCallback([&bShowSplines](std::weak_ptr<Shape> theIcon) {
+        bShowSplines = !bShowSplines;
+    }).build();
+    std::shared_ptr<Shape> controlPointToggle = IconBuilder(&camera).withOnClickCallback([&bShowControlPoints](std::weak_ptr<Shape> theIcon) {
+        bShowControlPoints = !bShowControlPoints;
+    }).build();
+    renderer.addMesh(splineToggle, &program);
+    renderer.addMesh(controlPointToggle, &program);
     auto preRenderCustomization = [&] {
         ++i;
-        if (i == 12) {
+        if (i == 42) {
             i = 0;
             ++j;
             j = j % font.getNGlyphs();
@@ -1182,11 +1202,15 @@ void ttfInterpreter(GLFWwindow* window) {
                     contours.push_back(spline);
                 }
             }
-            for (auto spline : contours) {
-                renderer.addMesh(spline, &splineCurveProgram);
+            if (bShowSplines) {
+                for (auto spline : contours) {
+                    renderer.addMesh(spline, &splineCurveProgram);
+                }
             }
-            for (auto s : reifiedControlPoints) {
-                renderer.addMesh(s);
+            if (bShowControlPoints) {
+                for (auto s : reifiedControlPoints) {
+                    renderer.addMesh(s);
+                }
             }
             lastCurves.clear();
             lastReifiedControlPoints.clear();
@@ -1226,6 +1250,164 @@ void renderTextEditor(GLFWwindow* window) {
     renderer.addMesh(textBox, {&program, &glyphProgram});
     picker.enable(window);
     MeshDragger::camera = &camera;
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
+void updateScrollBoxBasedOnTileColour(int i, int j, unsigned int* data, int* colourIndices) {
+    int offset = 16 * ((7-i) % 2);
+    if (colourIndices[i*8 + j] == 0) {
+        data[i/2] &= ~(1u << (offset + (7-j)));
+        data[i/2] &= ~(1u << (offset + (7-j) + 8));
+    } else if (colourIndices[i*8 + j] == 1) {
+        data[i/2] &= ~(1u << (offset + (7-j)));
+        data[i/2] |= (1u << (offset + (7-j) + 8));
+    } else if (colourIndices[i*8 + j] == 2) {
+        data[i/2] |= (1u << (offset + (7-j)));
+        data[i/2] &= ~(1u << (offset + (7-j) + 8));
+    } else {
+        data[i/2] |= (1u << (offset + (7-j)));
+        data[i/2] |= (1u << (offset + (7-j) + 8));
+    }
+}
+
+unsigned char getColourIndexFromPalette(unsigned char palette, int colourIndex) {
+    if (colourIndex == 3) {
+        return (palette & 0b11000000) >> 6;
+    }
+    if (colourIndex == 2) {
+        return (palette & 0b00110000) >> 4;
+    }
+    if (colourIndex == 1) {
+        return (palette & 0b00001100) >> 2;
+    }
+    return palette & 0b00000011;
+}
+
+void updatePaletteData(unsigned char& palette, std::vector<int> data) {
+    if (data.size() < 4) {
+        int i = data.size();
+        while (i <= 4) {
+            data.push_back(3-i);
+            ++i;
+        }
+    }
+    palette = (palette & 0b00111111) | ((data[0] & 0b11) << 6);
+    palette = (palette & 0b11001111) | ((data[1] & 0b11) << 4);
+    palette = (palette & 0b11110011) | ((data[2] & 0b11) << 2);
+    palette = (palette & 0b11111100) | ((data[3] & 0b11));
+}
+
+void renderTileDataInterpreter(GLFWwindow* window) {
+    glm::vec3 rawColourData[4] = {glm::vec3(235.f/255.f,255.f/255.f,230.f/255.f), glm::vec3(178.f/255.f,255.f/255.f,102.f/255.f), glm::vec3(102.f/255.f,204.f/255.f,55.f/255.f), glm::vec3(25.f/255.f,51.f/255.f,15.f/255.f)};
+    unsigned char palette = 0b11100100;
+    TTFont font = interpret();
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    glyphProgram.init();
+    ShaderProgram program(getShaderDirectory() + "vertexshader.glsl", getShaderDirectory() + "fragmentshader.glsl");
+    program.init();
+    Scene theScene{};
+    Renderer renderer(&theScene, &glyphProgram);
+    Camera camera(glm::vec3(0.0f,0.f,10.f), glm::vec3(0.0f,0.0f,0.0f));
+    Arcball arcball(&camera);
+    MousePicker picker = MousePicker(&renderer, &camera, &theScene, [](double,double){}, [window, &arcball](double x,double y){
+        arcball.registerRotationCallback(window, x, y);
+    });
+    MeshDragger::camera = &camera;
+    picker.enable(window);
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+    std::shared_ptr<ScrollBox> scrollBox = std::make_unique<ScrollBox>(window, manager, 10, 0.5);
+    scrollBox->initReferenceToThis();
+    scrollBox->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.f,0.f,.5f)));
+    std::shared_ptr<TextBox> textBox = std::make_unique<TextBox>(window, manager, 1.f, 0.5f, &glyphProgram);
+    textBox->initReferenceToThis();
+    bool startAnimation=false;
+    std::shared_ptr<Shape> icon = IconBuilder(&camera).withOnClickCallback([&startAnimation](std::weak_ptr<Shape> eso){
+        startAnimation = !startAnimation;
+    }).build();
+    renderer.addMesh(icon);
+    renderer.addMesh(scrollBox);
+    textBox->setModelingTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.f,0.f,.5f)));
+    textBox->setData("3210");
+    renderer.addMesh(textBox);
+    std::vector<std::shared_ptr<Shape>> squares{};
+    int colourIndices[64]{};
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            glm::vec3 position = glm::vec3(-3.5 + j, 3.5 - i, 0.f);
+            squares.push_back(SquareBuilder().withPosition(position).withOnClickCallback([&scrollBox, &colourIndices, i, j](std::weak_ptr<Shape> eso){
+                colourIndices[i*8 + j] = (colourIndices[i*8 + j]+1) % 4;
+                unsigned int* data = scrollBox->getInternalData();
+                updateScrollBoxBasedOnTileColour(i, j, data, colourIndices);
+                scrollBox->updateScrollBar();
+            }).withOnRightClickCallback([&scrollBox, &colourIndices, i, j](std::weak_ptr<Shape> theShape) {
+                colourIndices[i*8 + j] = colourIndices[i*8 + j]-1;
+                unsigned int* data = scrollBox->getInternalData();
+                if (colourIndices[i*8 + j] == -1) {
+                    colourIndices[i*8 + j] = 3;
+                }
+                updateScrollBoxBasedOnTileColour(i, j, data, colourIndices);
+                scrollBox->updateScrollBar();
+            }).build());
+        }
+    }
+    for (auto square : squares) {
+        renderer.addMesh(square, &program);
+    }
+    int rate = 0;
+    auto animation = [&]() {
+        if (startAnimation) {
+            ++rate;
+            if (rate == 60) {
+                rate = 0;
+                auto data = textBox->getData();
+                if (data[2] == '0') {
+                    data[2] = '1';
+                } else if (data[2] == '1') {
+                    data[2] = '0';
+                }
+                if (data[3] == '1') {
+                    data[3] = '0';
+                } else if (data[3] == '0') {
+                    data[3] = '1';
+                }
+                textBox->setData(data);
+            }
+        }
+        unsigned int* data = scrollBox->getInternalData();
+        updatePaletteData(palette, textBox->getData());
+        for (int i = 0; i < 4; ++i) {
+            unsigned char firstByte = data[i] >> 24;
+            unsigned char secondByte = data[i] << 8 >> 24;
+            for (int j = 0; j < 8; ++j) {
+                unsigned char firstBit = firstByte >> (7 - j) & 1;
+                unsigned char secondBit = secondByte >> (7 - j) & 1;
+                unsigned char colourIndex = secondBit << 1 | firstBit;
+                if (colourIndex > 3) {
+                    throw std::exception();
+                }
+                unsigned char idx = getColourIndexFromPalette(palette, colourIndex);
+                squares[i*2*8 + j]->setColour(rawColourData[idx]);
+                colourIndices[i*2*8 + j] = colourIndex;
+            }
+            unsigned char thirdByte = data[i] << 16 >> 24;
+            unsigned char fourthByte = data[i] << 24 >> 24;
+            for (int j = 0; j < 8; ++j) {
+                unsigned char firstBit = thirdByte >> (7 - j) & 1;
+                unsigned char secondBit = fourthByte >> (7 - j) & 1;
+                unsigned char colourIndex = secondBit << 1 | firstBit;
+                if (colourIndex > 3) {
+                    throw std::exception();
+                }
+                unsigned char idx = getColourIndexFromPalette(palette, colourIndex);
+                squares[(i*2+1)*8 + j]->setColour(rawColourData[idx]);
+                colourIndices[(i*2+1)*8 + j] = colourIndex;
+            }
+        }
+    };
+    renderer.addPreRenderCustomization(animation);
     renderer.buildandrender(window, &camera, &theScene);
 }
 
@@ -1295,37 +1477,18 @@ void renderFontEngine(GLFWwindow* window) {
         square->setColour(glm::vec3(f, f, f));
         menuDisplay.push_back(square);
         std::function<void(std::shared_ptr<Glyph>)> cb = [&, i](std::shared_ptr<Glyph> glyph) {
-            glm::vec2 centre = glm::vec2((glyph->getEmSpaceBoundingBox()[2]+glyph->getEmSpaceBoundingBox()[0])/2.f, (glyph->getEmSpaceBoundingBox()[3] + glyph->getEmSpaceBoundingBox()[1])/2.f);
-            glyph->setColour(glm::vec3(0.f,1.f,0.f));
+            glyph->setColour(glm::vec3(0.f,0.f,0.f));
             glyph->setOnHover([](std::weak_ptr<Shape> thisGlyph) {
-                thisGlyph.lock()->setColour(glm::vec3(1.f,0.f,0.f));
+                thisGlyph.lock()->setColour(glm::vec3(1.f,1.f,1.f));
             });
             glyph->setOffHover([](std::weak_ptr<Shape> thisGlyph) {
-                thisGlyph.lock()->setColour(glm::vec3(0.f,1.f,0.f));
+                thisGlyph.lock()->setColour(glm::vec3(0.f,0.f,0.f));
             });
             glyph->setOnClick([window](std::weak_ptr<Shape> thisGlyph) {
                 MeshDragger::registerMousePositionCallback(window, thisGlyph);
             });
-            float x = (corners[1].x - corners[0].x) / ((float)font.unitsPerEm);
-            float y = (corners[1].y - corners[0].y) / ((float)font.unitsPerEm);
-            float s = std::min(x,y);
-            float boxy;
-            float boxx;
-            float minboxxw = corners[0].x + ((glyph->getEmSpaceBoundingBox()[0])/(float)font.unitsPerEm * 2 * corners[1].x);
-            float minboxyw = corners[0].y + ((glyph->getEmSpaceBoundingBox()[1])/(float)font.unitsPerEm * 2 * corners[1].y);
-            glm::mat4 emToWorld = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
             float worldSpaceBoundingBox[4];
-            for (int i = 0; i < 4; ++i) {
-                if (i % 2 == 0) {
-                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(glyph->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
-                }
-                else {
-                    worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(0.f, glyph->getEmSpaceBoundingBox()[i],0.f,1.0f)).y;
-                }
-            }
-            boxx = -worldSpaceBoundingBox[0] + minboxxw;
-            boxy = -worldSpaceBoundingBox[1] + minboxyw;
-            emToWorld = glm::translate(glm::mat4(1.0f), glm::vec3(boxx, boxy, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.f)) * glm::translate(glm::mat4(1.0f), glm::vec3(-1.f * centre.x, -1.f * centre.y, 0.0f));
+            glm::mat4 emToWorld = computeEmToWorldTransform(corners, glyph, font.unitsPerEm);
             for (int i = 0; i < 4; ++i) {
                 if (i % 2 == 0) {
                     worldSpaceBoundingBox[i] = (emToWorld * glm::vec4(glyph->getEmSpaceBoundingBox()[i], 0.f,0.f,1.0f)).x;
@@ -1657,6 +1820,497 @@ bool Chip8InputHandler::is_key_pressed[16] = {
     false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 };
 
+struct SM83Core {
+    uint8_t interruptEnable;
+    uint8_t instructionRegister;
+    uint8_t A;
+    // X X X X C H N Z
+    uint8_t F;
+    uint8_t registers[6];
+    uint16_t PC;
+    uint16_t SP;
+};
+
+uint8_t RAM[65636];
+
+void blank_n(uint8_t& flag) {
+    flag = flag & ~(0x2);
+}
+
+void set_n(uint8_t& flag) {
+    flag = flag | 0x2;
+}
+
+void blank_z(uint8_t& flag) {
+    flag = flag & ~(0x1);
+}
+
+void set_z(uint8_t& flag) {
+    flag = flag | 0x1;
+}
+
+void set_half_carry_bit(SM83Core& cpuCore) {
+    cpuCore.F = cpuCore.F | (uint8_t)0x4;
+}
+
+void blank_half_carry_bit(SM83Core& cpuCore) {
+    cpuCore.F = cpuCore.F & ~((uint8_t)0x4);
+}
+
+void set_half_carry_bit(uint16_t& carry_bits, SM83Core& cpuCore) {
+    if (carry_bits & 0x10) {
+        set_half_carry_bit(cpuCore);
+    } else {
+        blank_half_carry_bit(cpuCore);
+    }
+}
+
+void set_carry_bit(SM83Core& cpuCore) {
+    cpuCore.F = cpuCore.F | (uint8_t)0x8;
+}
+
+void blank_carry_bit(SM83Core& cpuCore) {
+    cpuCore.F = cpuCore.F & ~((uint8_t)0x8);
+}
+
+void set_carry_bit(uint16_t& carry_bits, SM83Core& cpuCore) {
+    if (carry_bits & 0x100) {
+        set_carry_bit(cpuCore);
+    } else {
+        blank_carry_bit(cpuCore);
+    }
+}
+
+uint8_t get_carry_bit(SM83Core& cpuCore) {
+    return cpuCore.F & 0x8;
+}
+
+void flip_carry_bit(SM83Core& cpuCore) {
+    get_carry_bit(cpuCore) ? blank_carry_bit(cpuCore) : set_carry_bit(cpuCore);
+}
+
+uint16_t get_HL_addr(SM83Core& cpuCore) {
+    return ((uint16_t)cpuCore.registers[4] << 8 | cpuCore.registers[5]);
+}
+
+void set_zero_bit(SM83Core& cpuCore, uint8_t result) {
+    result == 0 ? set_z(cpuCore.F) : blank_z(cpuCore.F);
+}
+
+void addition_bookkeeping(SM83Core& cpuCore, uint8_t result, uint8_t& src1, uint8_t& src2) {
+    uint16_t carry_bits = (src1 ^ src2) ^ result;
+    set_zero_bit(cpuCore, (uint8_t)(result & 0xFF));
+    blank_n(cpuCore.F);
+    set_half_carry_bit(carry_bits, cpuCore);
+    set_carry_bit(carry_bits, cpuCore);
+}
+
+uint8_t gb_inc(SM83Core& cpuCore, uint8_t& src1)  {
+    uint16_t result = src1 + 1;
+    uint16_t carry_bits = (src1 ^ 0x1) ^ result;
+    set_zero_bit(cpuCore, (uint8_t)(result & 0xFF));
+    set_half_carry_bit(carry_bits, cpuCore);
+    blank_n(cpuCore.F);
+    return result & 0xFF;
+}
+
+uint8_t gb_dec(SM83Core& cpuCore, uint8_t& src1) {
+    uint16_t result = src1 - 1;
+    set_zero_bit(cpuCore, (uint8_t)(result & 0xFF));
+    (src1 & 0xF) == 0 ? set_half_carry_bit(cpuCore) : blank_half_carry_bit(cpuCore);
+    set_n(cpuCore.F);
+    return result & 0xFF;
+}
+
+uint8_t gb_add(SM83Core& cpuCore, uint8_t& src1, uint8_t& src2) {
+    uint16_t result = src1 + src2;
+    addition_bookkeeping(cpuCore, (uint8_t)(result & 0xFF), src1, src2);
+    return result & 0xFF;
+}
+
+uint8_t gb_add_with_carry(SM83Core& cpuCore, uint8_t& src1, uint8_t& src2) {
+    uint16_t result = src1 + src2 + get_carry_bit(cpuCore);
+    set_zero_bit(cpuCore, (uint8_t)(result & 0xFF));
+    blank_n(cpuCore.F);
+    cpuCore.F = (result > 0xFF) ? cpuCore.F | 0x8 : cpuCore.F & ~(0x8);
+    cpuCore.F = (((src1 & 0xF) + (src2 & 0xF) + get_carry_bit(cpuCore)) > 0xF) ? cpuCore.F | 0x4 : cpuCore.F & ~(0x4);
+    return result & 0xFF;
+}
+
+uint8_t gb_sub(SM83Core& cpuCore, uint8_t& src1, uint8_t& src2) {
+    uint16_t result = src1 - src2;
+    src1 < src2 ? set_carry_bit(cpuCore) : blank_carry_bit(cpuCore);
+    (src1 & 0xF) < (src2 & 0xF) ? set_half_carry_bit(cpuCore) : blank_half_carry_bit(cpuCore);
+    set_n(cpuCore.F);
+    set_zero_bit(cpuCore, (uint8_t)(result & 0xFF));
+    return result & 0xFF;
+}
+
+uint8_t gb_sub_with_carry(SM83Core& cpuCore, uint8_t& src1, uint8_t& src2) {
+    uint8_t carry = get_carry_bit(cpuCore);
+    uint16_t result = src1 - src2 - carry;
+    src1 < (src2 + carry) ? set_carry_bit(cpuCore) : blank_carry_bit(cpuCore);
+    (src1 & 0xF) < ((src2 & 0xF) + carry) ? set_half_carry_bit(cpuCore) : blank_half_carry_bit(cpuCore);
+    set_n(cpuCore.F);
+    set_zero_bit(cpuCore, (uint8_t)(result & 0xFF));
+    return result & 0xFF;
+}
+
+void workspace() {
+    SM83Core cpuCore;
+    uint8_t instruction = 0;
+    cpuCore.registers[1] = 0;
+    cpuCore.registers[0] = 2;
+    cpuCore.registers[4] = 0;
+    cpuCore.registers[5] = 0;
+    cpuCore.A = 0; cpuCore.F = 0;
+    RAM[0] = 200; cpuCore.A = 255;
+    instruction = 0x86;
+    if (((instruction >> 6) & 0x3) == 0x1) {
+        if ((instruction & 0x7) == 0x6) {
+            uint8_t tgt = (instruction >> 3) & 0x7;
+            uint16_t addr = get_HL_addr(cpuCore);
+            cpuCore.registers[tgt] = RAM[addr];
+            cpuCore.PC += 1;
+        } if (((instruction >> 3) & 0x7) == 0x6) {
+            uint8_t src = instruction & 0x7;
+            uint16_t addr = get_HL_addr(cpuCore);
+            RAM[addr] = cpuCore.registers[src];
+        }
+        else {
+            uint8_t src = instruction & 0x7;
+            uint8_t tgt = (instruction >> 3) & 0x7;
+            cpuCore.registers[tgt] = cpuCore.registers[src];
+            cpuCore.PC += 1;
+        }
+    } else if (((instruction >> 6) & 0x3) == 0x0) {
+        if (instruction == 0x36) {
+            cpuCore.PC += 1;
+            uint16_t addr = get_HL_addr(cpuCore);
+            RAM[addr] = RAM[cpuCore.PC];
+            cpuCore.PC += 1;
+        } else if (instruction == 0xA) {
+            uint16_t addr = ((uint16_t)cpuCore.registers[0] << 8 | cpuCore.registers[1]);
+            cpuCore.A = RAM[addr];
+            cpuCore.PC += 1;
+        } else if (instruction == 0x1A) {
+            uint16_t addr = ((uint16_t)cpuCore.registers[2] << 8 | cpuCore.registers[3]);
+            cpuCore.A = RAM[addr];
+            cpuCore.PC += 1;
+        } else if (instruction == 0x02) {
+            uint16_t addr = ((uint16_t)cpuCore.registers[0] << 8 | cpuCore.registers[1]);
+            RAM[addr] = cpuCore.A;
+        } else if (instruction == 0x12) {
+            uint16_t addr = ((uint16_t)cpuCore.registers[2] << 8 | cpuCore.registers[3]);
+            RAM[addr] = cpuCore.A;
+            cpuCore.PC += 1;
+        } else if ((instruction & 0x7) == 0x6) {
+            uint8_t tgt = (instruction >> 3) & 0x7;
+            cpuCore.PC += 1;
+            cpuCore.registers[tgt] = RAM[cpuCore.PC];
+            cpuCore.PC += 1;
+        } else if ((instruction & 0xF) == 0x1) {
+            uint8_t tgt = ((instruction >> 4) & 0x3);
+            cpuCore.PC += 1;
+            uint8_t lsb = RAM[cpuCore.PC]; cpuCore.PC += 1;
+            uint8_t msb = RAM[cpuCore.PC]; cpuCore.PC += 1;
+            cpuCore.registers[tgt] = lsb;
+            cpuCore.registers[tgt+1] = msb;
+        } else if (instruction == 0x08) {
+            cpuCore.PC += 1;
+            uint8_t lsb = RAM[cpuCore.PC]; cpuCore.PC += 1;
+            uint8_t msb = RAM[cpuCore.PC]; cpuCore.PC += 1;
+            uint16_t addr = ((uint16_t)msb << 8 | lsb);
+            RAM[addr] = cpuCore.SP & 0xFF; ++addr;
+            RAM[addr] = (cpuCore.SP >> 8);
+            cpuCore.PC += 1;
+        } else if ((instruction & 0x7) == 0x4) {
+            uint8_t tgt = (instruction >> 3) & 0x7;
+            cpuCore.registers[tgt] = gb_inc(cpuCore, cpuCore.registers[tgt]);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x34) {
+            uint8_t source = RAM[get_HL_addr(cpuCore)];
+            source = gb_inc(cpuCore, source);
+            RAM[get_HL_addr(cpuCore)] = source;
+            cpuCore.PC += 1;
+        } else if ((instruction & 0x7) == 0x5) {
+            uint8_t tgt = (instruction >> 3) & 0x7;
+            cpuCore.registers[tgt] = gb_dec(cpuCore, cpuCore.registers[tgt]);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x35) {
+            uint8_t source = RAM[get_HL_addr(cpuCore)];
+            source = gb_dec(cpuCore, source);
+            RAM[get_HL_addr(cpuCore)] = source;
+            cpuCore.PC += 1;
+        } else if (instruction == 0x3F) {
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            flip_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x37) {
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            set_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x27) {
+            //unknown
+            cpuCore.PC += 1;
+        } else if (instruction == 0x2F) {
+            cpuCore.A = ~cpuCore.A;
+            set_n(cpuCore.F);
+            set_half_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if ((instruction & 0xF) == 0x3) {
+            uint8_t tgt = (instruction >> 4) & 0x3;
+            uint16_t res = ((uint16_t)(cpuCore.registers[tgt]) << 8) | cpuCore.registers[tgt+1];
+            res += 1;
+            cpuCore.registers[tgt] = (res >> 8);
+            cpuCore.registers[tgt+1] = (res & 0xFF);
+        } else if ((instruction & 0xF) == 0xB) {
+            uint8_t tgt = (instruction >> 4) & 0x3;
+            uint16_t res = ((uint16_t)(cpuCore.registers[tgt]) << 8) | cpuCore.registers[tgt+1];
+            res -= 1;
+            cpuCore.registers[tgt] = (res >> 8);
+            cpuCore.registers[tgt+1] = (res & 0xFF);
+        }
+    } else if (instruction == 0xFA) {
+        cpuCore.PC += 1;
+        uint8_t lsb = RAM[cpuCore.PC];
+        cpuCore.PC += 1;
+        uint8_t msb = RAM[cpuCore.PC];
+        uint16_t addr = (lsb | (uint16_t)msb << 8);
+        cpuCore.A = RAM[addr];
+        cpuCore.PC += 1;
+    } else if (instruction == 0xEA) {
+        cpuCore.PC += 1;
+        uint8_t lsb = RAM[cpuCore.PC];
+        cpuCore.PC += 1;
+        uint8_t msb = RAM[cpuCore.PC];
+        uint16_t addr = (lsb | (uint16_t)msb << 8);
+        RAM[addr] = cpuCore.A;
+        cpuCore.PC += 1;
+    } else if (instruction == 0xF2) {
+        uint16_t addr = ((uint16_t)cpuCore.registers[1] | 0xFF00);
+        cpuCore.A = RAM[addr];
+        cpuCore.PC += 1;
+    } else if (instruction == 0xE2) {
+        uint16_t addr = ((uint16_t)cpuCore.registers[1] | 0xFF00);
+        RAM[addr] = cpuCore.A;
+        cpuCore.PC += 1;
+    } else if (instruction == 0xF0) {
+        cpuCore.PC += 1;
+        uint8_t n = RAM[cpuCore.PC];
+        uint16_t addr = ((uint16_t)n | 0xFF00);
+        cpuCore.A = RAM[addr];
+        cpuCore.PC += 1;
+    } else if (instruction == 0xE0) {
+        cpuCore.PC += 1;
+        uint8_t n = RAM[cpuCore.PC];
+        uint16_t addr = ((uint16_t)n | 0xFF00);
+        RAM[addr] = cpuCore.A;
+        cpuCore.PC += 1;
+    } else if (instruction == 0x32) {
+        uint16_t addr = get_HL_addr(cpuCore);
+        RAM[addr] = cpuCore.A;
+        addr -= 1;
+        cpuCore.registers[4] = addr >> 8;
+        cpuCore.registers[5] = addr & 0xFF;
+        cpuCore.PC += 1;
+    } else if (instruction == 0x2A) {
+        uint16_t addr = get_HL_addr(cpuCore);
+        cpuCore.A = RAM[addr]; addr += 1;
+        cpuCore.registers[4] = addr >> 8;
+        cpuCore.registers[5] = addr & 0xFF;
+        cpuCore.PC += 1;
+    } else if (instruction == 0x22) {
+        uint16_t addr = get_HL_addr(cpuCore);
+        RAM[addr] = cpuCore.A; addr += 1;
+        cpuCore.registers[4] = addr >> 8;
+        cpuCore.registers[5] = addr & 0xFF;
+        cpuCore.PC += 1;
+    } else if (instruction == 0xF9) {
+        cpuCore.PC = get_HL_addr(cpuCore);
+        cpuCore.PC += 1;
+    } else if (((instruction >> 6) & 0x3) == 0x3) {
+        if ((instruction & 0xF) == 0x5) {
+            uint8_t tgt = (instruction >> 4) & 0x3;
+            --cpuCore.SP;
+            RAM[cpuCore.SP] = cpuCore.registers[tgt];
+            --cpuCore.SP;
+            RAM[cpuCore.SP] = cpuCore.registers[tgt+1];
+            cpuCore.PC += 1;
+        } else if ((instruction & 0xF) == 0x1) {
+            uint8_t tgt = (instruction >> 4) & 0x3;
+            uint8_t lsb = RAM[cpuCore.SP]; ++cpuCore.SP;
+            uint8_t msb = RAM[cpuCore.SP]; ++cpuCore.SP;
+            cpuCore.registers[tgt+1] = lsb;
+            cpuCore.registers[tgt] = msb;
+            cpuCore.PC += 1;
+        } else if (instruction == 0xF8) {
+            int8_t e = RAM[cpuCore.PC];
+            uint16_t result = (cpuCore.SP & 0xFF) + e;
+            cpuCore.registers[5] = result & 0xFF;
+            uint16_t u = cpuCore.SP ^ e ^ result;
+            blank_z(cpuCore.F);
+            blank_n(cpuCore.F);
+            set_half_carry_bit(u, cpuCore);
+            set_carry_bit(u, cpuCore);
+            bool sign = e & 0x80;
+            uint8_t adj = sign ? 0xFF : 0x00;
+            result = (cpuCore.SP >> 8) + adj + ((cpuCore.F & 0x8) >> 3);
+            cpuCore.registers[4] = result & 0xFF;
+            cpuCore.PC += 1;
+        } else if (instruction == 0xC6) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = gb_add(cpuCore,data,cpuCore.A);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xCE) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = gb_add_with_carry(cpuCore,data,cpuCore.A);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xDE) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = gb_sub_with_carry(cpuCore,data,cpuCore.A);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xD6) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = gb_sub(cpuCore, cpuCore.A, data);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xFE) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            gb_sub(cpuCore, cpuCore.A, data);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xE6) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = data & cpuCore.A;
+            set_zero_bit(cpuCore, cpuCore.A);
+            blank_n(cpuCore.F);
+            set_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xF6) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = data | cpuCore.A;
+            set_zero_bit(cpuCore, cpuCore.A);
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xEE) {
+            cpuCore.PC += 1;
+            uint8_t data = RAM[cpuCore.PC];
+            cpuCore.A = cpuCore.A ^ data;
+            set_zero_bit(cpuCore, cpuCore.A);
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        }
+    } else if (instruction == 0x86) {
+        uint8_t data = RAM[get_HL_addr(cpuCore)];
+        cpuCore.A = gb_add(cpuCore,data,cpuCore.A);
+        cpuCore.PC += 1;
+    }
+    else if (((instruction >> 6) & 0x3) == 0x2) {
+        if (((instruction >> 3) & 0x7) == 0) {
+            int8_t tgt = instruction & 0x7;
+            cpuCore.A = gb_add(cpuCore,cpuCore.registers[tgt],cpuCore.A);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 1) {
+            int8_t tgt = instruction & 0x7;
+            cpuCore.A = gb_add_with_carry(cpuCore,cpuCore.registers[tgt],cpuCore.A);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x8E) {
+            uint8_t data = RAM[get_HL_addr(cpuCore)];
+            cpuCore.A = gb_add_with_carry(cpuCore,data,cpuCore.A);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 2) {
+            int8_t tgt = instruction & 0x7;
+            cpuCore.A = gb_sub(cpuCore, cpuCore.A, cpuCore.registers[tgt]);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x96) {
+            uint8_t data = RAM[get_HL_addr(cpuCore)];
+            cpuCore.A = gb_sub(cpuCore, cpuCore.A, data);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 3) {
+            int8_t tgt = instruction & 0x7;
+            cpuCore.A = gb_sub_with_carry(cpuCore, cpuCore.A, cpuCore.registers[tgt]);
+            cpuCore.PC += 1;
+        } else if (instruction == 0x9E) {
+            uint8_t data = RAM[get_HL_addr(cpuCore)];
+            cpuCore.A = gb_sub_with_carry(cpuCore, cpuCore.A, data);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 0x7) {
+            int8_t tgt = instruction & 0x7;
+            gb_sub(cpuCore, cpuCore.A, cpuCore.registers[tgt]);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xBE) {
+            uint8_t data = RAM[get_HL_addr(cpuCore)];
+            gb_sub(cpuCore, cpuCore.A, data);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 0x4) {
+            uint8_t tgt = instruction & 0x7;
+            uint8_t result = cpuCore.A & cpuCore.registers[tgt];
+            cpuCore.A = result;
+            set_zero_bit(cpuCore, result);
+            blank_n(cpuCore.F);
+            set_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xA6) {
+            uint8_t result = RAM[get_HL_addr(cpuCore)];
+            result = result & cpuCore.A;
+            cpuCore.A = result;
+            set_zero_bit(cpuCore, result);
+            blank_n(cpuCore.F);
+            set_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 0x6) {
+            uint8_t tgt = instruction & 0x7;
+            uint8_t result = cpuCore.A | cpuCore.registers[tgt];
+            cpuCore.A = result;
+            set_zero_bit(cpuCore, result);
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xB6) {
+            uint8_t data = RAM[get_HL_addr(cpuCore)];
+            uint8_t result = cpuCore.A | data;
+            cpuCore.A = result;
+            set_zero_bit(cpuCore, result);
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (((instruction >> 3) & 0x7) == 0x5) {
+            uint8_t tgt = instruction & 0x7;
+            cpuCore.A = cpuCore.A ^ cpuCore.registers[tgt];
+            set_zero_bit(cpuCore, cpuCore.A);
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        } else if (instruction == 0xAE) {
+            uint8_t data = RAM[get_HL_addr(cpuCore)];
+            cpuCore.A = cpuCore.A ^ data;
+            set_zero_bit(cpuCore, cpuCore.A);
+            blank_n(cpuCore.F);
+            blank_half_carry_bit(cpuCore);
+            blank_carry_bit(cpuCore);
+            cpuCore.PC += 1;
+        }
+    }
+}
+
 void GameBoyInterpreter(GLFWwindow* window) {
     ShaderProgram program(getShaderDirectory() + "instanced_vs.glsl", getShaderDirectory() + "instanced_fs.glsl");
     program.init();
@@ -1830,7 +2484,7 @@ void chipEightInterpreter(GLFWwindow* window) {
         }
     }
     //load game into ram
-    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/snake.ch8", std::ios::binary);
+    std::ifstream inputFile("/Users/lawrenceberardelli/Downloads/Stars [Sergey Naydenov, 2010].ch8", std::ios::binary);
     if (!inputFile) {
         std::cerr << "Failed to open the file." << std::endl;
         return;
@@ -2023,6 +2677,45 @@ void skeletalAnimationPackage(GLFWwindow* window) {
     renderer.buildandrender(window, &camera, &theScene);
 }
 
+#include <codecvt>
+
+void textViewer(GLFWwindow* window) {
+    ShaderProgram glyphProgram(getShaderDirectory() + "glyphvs.glsl", getShaderDirectory() + "glyphfs.glsl");
+    glyphProgram.init();
+    Camera camera(glm::vec3(0.0f,0.0f,35.f), glm::vec3(0.0f,0.0f,0.0f));
+    Arcball arcball(&camera);
+    Scene theScene{};
+    MeshDragger::camera = &camera;
+    Renderer renderer(&theScene,&glyphProgram);
+    TTFont font = interpret();
+    auto manager = FontLoader::loadFont(font, {});
+    while (!manager->bReady) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+    std::ifstream file("/Users/lawrenceberardelli/Documents/writing/all_strange.txt", std::ios::binary);
+    if (!file) {
+            std::cerr << "Failed to open file\n";
+        return;
+    }
+
+    // Read the whole file as a string
+    std::string utf8((std::istreambuf_iterator<char>(file)),
+                      std::istreambuf_iterator<char>());
+
+    // Convert UTF-8 string to UTF-32 (each char = code point)
+    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+    std::u32string utf32 = conv.from_bytes(utf8);
+    auto corners = camera.fovThroughOrigin();
+    // Output each code point
+    for (char32_t cp : utf32) {
+        auto fill = manager->getFromUnicode(cp);
+        auto emToWorld = computeEmToWorldTransform(corners, fill, font.unitsPerEm);
+        fill->setModelingTransform(emToWorld);
+        renderer.addMesh(fill);
+    }
+    renderer.buildandrender(window, &camera, &theScene);
+}
+
 
 /*
  TODO: Using MVC to define multiple viewing rectangles. Tinker with glViewport and google around to see examples.
@@ -2056,7 +2749,7 @@ int main(int argc, const char * argv[]) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glViewport(0, 0, ScreenHeight::screen_width, ScreenHeight::screen_height);
-    renderBPTSurface(window);
+    renderBasicSplineStudy(window);
 
     glfwTerminate();
     return 0;
