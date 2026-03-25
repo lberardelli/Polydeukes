@@ -4,16 +4,19 @@ Polydeukes is a 3d graphics renderer and test bed. It's goal is to create a flex
 At this time Polydeukes can only be built on MacOS. There are no plans to make this jawn cross platform. It's really just for fun and for sharing neat images and animations with friends. 
 
 Polydeukes includes the following modules
-1. A CPU based particle system and physics engine framework.
-2. A .bvh interpreter (motion capture)
+1. A CPU based particle system and physics engine framework with pluggable force callbacks (gravity, spring, drag) and velocity Verlet integration.
+2. A .bvh interpreter (motion capture) — parses joint hierarchies and per-frame Euler angle data, supporting all six Euler orderings.
 3. A CPU based spline curve system which can edit and interpret polynomial interpolation, hermite, and bezier spline curves.
-4. A GPU based spline system which can edit and interpret bezier spline curves and surfaces. Also includes a .bpt interpreter
-5. A chip-8 interpreter
-6. A very basic obj file interpreter
-7. A font engine (lol)
+4. A GPU based spline system which can edit and interpret bezier spline curves and surfaces using OpenGL tessellation shaders. Also includes a .bpt interpreter.
+5. A TrueType font binary parser with no external dependencies — supports simple and compound glyphs, full table parsing (glyf, loca, hmtx, cmap), and SDF-based rendering via winding-number tests.
+6. A Game Boy tile data editor — interactive 8×8 pixel grid editor with live two-bit-per-pixel DMG tile byte readout.
+7. A chip-8 interpreter.
+8. A very basic obj file interpreter.
+9. A Sierpiński triangle (early demo, predates the Polydeukes framework).
+10. An in-progress armature/rigging module.
 
 ### Future
-I'd like to beef up the obj file interpreter and make a rigging module for animations. Also, each of the existing modules can be improved by adding user facing tooling. For example, the chip8 interpret doesn't allow you to switch the game you're playing without restarting the app and hard coding it. Keeping the user "on the rails" doesn't exist and lots of activites cause crashing: if you try to render a quadric or higher interpolation curve, we crash. 
+I'd like to beef up the obj file interpreter and finish the rigging module for animations. Also, each of the existing modules can be improved by adding user facing tooling. For example, the chip8 interpreter doesn't allow you to switch the game you're playing without restarting the app and hard coding it. Keeping the user "on the rails" doesn't exist and lots of activities cause crashing: if you try to render a quadric or higher interpolation curve, we crash.
 
 ## Build Instructions
 
